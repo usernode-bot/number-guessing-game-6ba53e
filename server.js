@@ -322,6 +322,7 @@ async function extendRound(round) {
 }
 
 async function checkRound() {
+  if (!APP_SECRET_KEY) return;
   if (inFlightPayout) return;
   const currentRound = game.getCurrentRound();
   if (!currentRound) {
