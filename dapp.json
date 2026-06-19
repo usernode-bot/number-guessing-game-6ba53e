@@ -6,7 +6,8 @@
       "description": "On-chain game wallet address. Incoming guesses are sent here; payouts are sent from here.",
       "required": true,
       "private": false,
-      "default": "utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20yx79"
+      "default": "utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20yx79",
+      "staging_default": ""
     },
     {
       "key": "APP_SECRET_KEY",
