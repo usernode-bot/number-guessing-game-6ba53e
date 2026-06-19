@@ -157,7 +157,7 @@
     var lastSnapshotJson = '';
 
     var mockCheck = (window.usernode && typeof window.usernode.isMockEnabled === 'function')
-      ? window.usernode.isMockEnabled()
+      ? Promise.resolve(window.usernode.isMockEnabled())
       : Promise.resolve(false);
 
     mockCheck.catch(function () { return false; }).then(function (isMock) {

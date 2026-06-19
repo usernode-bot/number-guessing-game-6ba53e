@@ -441,21 +441,6 @@ app.get('*', (req, res) => {
 // ---------------------------------------------------------------------------
 
 async function start() {
-  if (pool) {
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS presses (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER NOT NULL,
-          username VARCHAR(255) NOT NULL,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        )
-      `);
-    } catch (e) {
-      console.warn('[db] migration failed (non-fatal):', e.message);
-    }
-  }
-
   if (IS_STAGING) {
     injectStagingSeeds();
   }

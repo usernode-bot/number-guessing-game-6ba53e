@@ -659,13 +659,14 @@ async function refreshState() {
     const res = await fetch('/__numguess/state', { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    if (data.loading) return;
 
     if (!appPubkey && data.appPubkey) {
       appPubkey = data.appPubkey;
       window.usernode = window.usernode || {};
       window.usernode.serverCacheUrl = '/__usernode/cache/' + appPubkey;
     }
+
+    if (data.loading) return;
 
     const prev = gameState;
     gameState = data;
@@ -880,7 +881,7 @@ async function init() {
   try {
     // Check mock
     const mockEnabled = (window.usernode && typeof window.usernode.isMockEnabled === 'function')
-      ? await window.usernode.isMockEnabled().catch(() => false)
+      ? await Promise.resolve(window.usernode.isMockEnabled()).catch(() => false)
       : false;
 
     if (!mockEnabled) {
