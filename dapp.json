@@ -2,16 +2,8 @@
   "name": "Number Guessing Game",
   "secrets": [
     {
-      "key": "APP_PUBKEY",
-      "description": "On-chain game wallet address. Incoming guesses are sent here; payouts are sent from here.",
-      "required": true,
-      "private": false,
-      "default": "utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20yx79",
-      "staging_default": "utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20yx79"
-    },
-    {
       "key": "APP_SECRET_KEY",
-      "description": "Secret key paired with APP_PUBKEY, used to sign server-side payout transactions.",
+      "description": "Secret key for the game wallet, used to sign server-side payout transactions.",
       "required": false,
       "private": true,
       "staging_default": ""

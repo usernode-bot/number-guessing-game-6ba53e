@@ -25,7 +25,7 @@ const port = parseInt(process.env.PORT || '3000', 10);
 const pool = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL }) : null;
 const JWT_SECRET = process.env.JWT_SECRET;
 
-const APP_PUBKEY = process.env.APP_PUBKEY || 'utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20yx79';
+const APP_PUBKEY = 'utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20yx79';
 const APP_SECRET_KEY = process.env.APP_SECRET_KEY || '';
 const NODE_RPC_URL = process.env.NODE_RPC_URL || 'http://usernode-node:3000';
 const TIMER_DURATION_MS = parseInt(process.env.TIMER_DURATION_MS || '86400000', 10);
