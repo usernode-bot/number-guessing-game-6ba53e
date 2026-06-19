@@ -106,6 +106,7 @@ function injectStagingSeeds() {
   // secret = 42: need x % 100 == 41. Use hex "00000029" = 41 in decimal.
   // secret = 75: need x % 100 == 74. Use hex "0000004a" = 74 in decimal.
   // secret = 23: need x % 100 == 22. Use hex "00000016" = 22 in decimal.
+  // secret = 28: need x % 100 == 27. Use hex "0000007f" = 127 in decimal (127 % 100 = 27).
   const seedHashes = [
     '00000029aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001',
     '0000004abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0002',
@@ -116,6 +117,12 @@ function injectStagingSeeds() {
   const p1 = 'utpk1stagingplayer000000000000000000000000000000000000000001';
   const p2 = 'utpk1stagingplayer000000000000000000000000000000000000000002';
   const p3 = 'utpk1stagingplayer000000000000000000000000000000000000000003';
+
+  // Round 4: 2-minute timer started 2 hours ago → already expired on boot.
+  // min_players=1 and two guesses so checkRound concludes it immediately after boot.
+  // secret=28: alice_s guessed 55 (27 away), bob_s guessed 70 (42 away) → alice_s wins.
+  const r4StartMs = now - 2 * 3600000;
+  const r4DurationMs = 120000; // 2 minutes — expires well before server boot
 
   const fakeTxs = [
     // Round 1 — secret 42 — alice_s wins with bullseye
@@ -139,9 +146,11 @@ function injectStagingSeeds() {
     { id: 'staging-r3-g3', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 3, guess: 26 }), timestamp_ms: now - 12 * 3600000 + 300 },
     { id: 'staging-r3-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 3, secret: 23, winner: p3, winner_guess: 25, pot: 3, participants: 3 }), timestamp_ms: now - 12 * 3600000 + TIMER_DURATION_MS },
 
-    // Round 4 — current open round, alice_s has guessed 55
-    { id: 'staging-r4-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 4, seed_hash: seedHashes[3], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS }), timestamp_ms: now - 2 * 3600000 },
-    { id: 'staging-r4-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 4, guess: 55 }), timestamp_ms: now - 2 * 3600000 + 1000 },
+    // Round 4 — already expired (2-min timer, started 2h ago); secret=28; alice_s wins (27 away vs bob_s 42 away)
+    // min_players=1 so checkRound concludes this automatically within 5s of boot
+    { id: 'staging-r4-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 4, seed_hash: seedHashes[3], active_duration_ms: r4DurationMs, min_players: 1 }), timestamp_ms: r4StartMs },
+    { id: 'staging-r4-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 4, guess: 55 }), timestamp_ms: r4StartMs + 1000 },
+    { id: 'staging-r4-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 4, guess: 70 }), timestamp_ms: r4StartMs + 2000 },
 
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
@@ -222,14 +231,18 @@ async function concludeRound(round) {
 
     console.log(`[payout] Round ${round.id}: secret=${secret}, winner=${winner}, pot=${pot}`);
 
-    await configureSigner();
+    if (APP_SECRET_KEY) {
+      await configureSigner();
 
-    // 1. Send payout to winner
-    const payoutMemo = { app: 'numguess', type: 'payout', round: round.id, winner };
-    await sendWithRetry(winner, pot, payoutMemo, 3);
-    console.log('[payout] Payout sent to', winner);
+      // 1. Send payout to winner
+      const payoutMemo = { app: 'numguess', type: 'payout', round: round.id, winner };
+      await sendWithRetry(winner, pot, payoutMemo, 3);
+      console.log('[payout] Payout sent to', winner);
+    } else {
+      console.log('[payout] No APP_SECRET_KEY — skipping token payout (staging/dev mode)');
+    }
 
-    // 2. Post end_round self-transfer
+    // 2. Post end_round self-transfer (or inject locally in staging)
     await postEndRound(round, secret, winner, result.winner.guess, pot, round.guesses.length);
 
     // 3. Start next round
@@ -254,8 +267,10 @@ async function postEndRound(round, secret, winner, winnerGuess, pot, participant
     pot,
     participants,
   };
-  await sendWithRetry(APP_PUBKEY, 0, memo, 3);
-  // Also inject locally so state updates immediately
+  if (APP_SECRET_KEY) {
+    await sendWithRetry(APP_PUBKEY, 0, memo, 3);
+  }
+  // Always inject locally so state updates immediately (only real path in staging)
   game.processTransaction({
     id: `local-end-${round.id}-${Date.now()}`,
     to: APP_PUBKEY,
@@ -288,8 +303,10 @@ async function postStartRound() {
     min_players: MIN_PLAYERS,
   };
 
-  await sendWithRetry(APP_PUBKEY, 0, memo, 3);
-  // Also inject locally
+  if (APP_SECRET_KEY) {
+    await sendWithRetry(APP_PUBKEY, 0, memo, 3);
+  }
+  // Always inject locally (only real path in staging)
   game.processTransaction({
     id: `local-start-${roundId}-${Date.now()}`,
     to: APP_PUBKEY,
@@ -311,18 +328,19 @@ async function extendRound(round) {
     active_duration_ms: round.activeDurationMs,
     min_players: round.minPlayers,
   };
-  // Update in memory immediately
+  // Update in memory immediately regardless of whether on-chain post succeeds
   round.endsAt = newEndsAt;
-  try {
-    await sendWithRetry(APP_PUBKEY, 0, memo, 1);
-  } catch (e) {
-    console.warn('[round] extension memo post failed (continuing):', e.message);
+  if (APP_SECRET_KEY) {
+    try {
+      await sendWithRetry(APP_PUBKEY, 0, memo, 1);
+    } catch (e) {
+      console.warn('[round] extension memo post failed (continuing):', e.message);
+    }
   }
   console.log(`[round] Extended round ${round.id}, new endsAt=${new Date(newEndsAt).toISOString()}`);
 }
 
 async function checkRound() {
-  if (!APP_SECRET_KEY) return;
   if (inFlightPayout) return;
   const currentRound = game.getCurrentRound();
   if (!currentRound) {
@@ -450,14 +468,18 @@ async function start() {
   await usernamesCache.start();
   nodeStatusProbe.start();
 
-  // Mark stream ready after backfill
+  // Mark stream ready after backfill, then ensure a round exists
   setTimeout(() => {
     const current = game.getCurrentRound();
     if (!current) {
-      if (APP_PUBKEY && APP_SECRET_KEY) {
+      if (APP_SECRET_KEY) {
+        // Production: post a real on-chain start_round
+        postStartRound().catch((e) => console.error('[boot] failed to create initial round:', e.message));
+      } else if (IS_STAGING || LOCAL_DEV) {
+        // Staging/local: create round in-memory only (no wallet needed)
         postStartRound().catch((e) => console.error('[boot] failed to create initial round:', e.message));
       } else {
-        console.warn('[boot] APP_PUBKEY/APP_SECRET_KEY not set — skipping auto round creation');
+        console.warn('[boot] APP_SECRET_KEY not set and not staging — skipping auto round creation');
       }
     }
   }, 500);
