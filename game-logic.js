@@ -194,7 +194,6 @@ function createGame(opts) {
         id: currentRound.id,
         startedAt: currentRound.startedAt,
         endsAt: currentRound.endsAt,
-        seedHash: currentRound.seedHash,
         minPlayers: currentRound.minPlayers,
         participants: currentRound.guesses.length,
         pot: currentRound.guesses.reduce((s, g) => s + g.amount, 0),
