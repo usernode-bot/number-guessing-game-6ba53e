@@ -414,6 +414,9 @@ app.post('/__numguess/admin/start', async (req, res) => {
   }
 });
 
+// Mock-enabled probe — always respond so the bridge doesn't fall through to the 401 catch-all
+app.get('/__mock/enabled', (_req, res) => res.json({ enabled: !!mockApi }));
+
 // Static assets — index:false so index.html is gated by JWT in the catch-all below
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
