@@ -302,13 +302,17 @@
       padding: .75rem 1rem; border-bottom: 1px solid var(--border);
     }
     .lb-row:last-child { border-bottom: none; }
-    .lb-rank { width: 28px; text-align: center; font-weight: 700; color: var(--text-muted); font-size: .85rem; }
+    .lb-row.is-me { background: rgba(124,58,237,0.08); }
+    .lb-rank { width: 28px; text-align: center; font-weight: 700; color: var(--text-muted); font-size: .85rem; flex-shrink: 0; }
     .lb-rank.gold { color: #f59e0b; }
     .lb-rank.silver { color: #9ca3af; }
     .lb-rank.bronze { color: #b45309; }
-    .lb-name { flex: 1; font-size: .9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .lb-stats { text-align: right; font-size: .78rem; color: var(--text-muted); }
-    .lb-stats strong { display: block; color: var(--text); }
+    .lb-info { flex: 1; overflow: hidden; }
+    .lb-name { font-size: .9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lb-meta { font-size: .72rem; color: var(--text-muted); margin-top: .1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lb-best-win { text-align: right; flex-shrink: 0; }
+    .lb-best-win span { display: block; font-size: .88rem; font-weight: 700; color: var(--accent-light); white-space: nowrap; }
+    .lb-best-win small { display: block; font-size: .65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
     /* ---- History ---- */
     .hist-round {
       border: 1px solid var(--border); border-radius: var(--radius);
@@ -638,6 +642,9 @@ let selectedTrack = '1d';
 let selectedLbTrack = '1d';
 let selectedHistTrack = '1d';
 
+let winAutoSwitchTimer = null;
+let seenEndedRounds = null; // null = not yet initialized; Set after first render
+
 // ---- Theme ----
 function toggleTheme() {
   const html = document.documentElement;
@@ -654,6 +661,7 @@ function toggleTheme() {
 
 // ---- Tabs ----
 function switchTab(tab) {
+  if (winAutoSwitchTimer) { clearTimeout(winAutoSwitchTimer); winAutoSwitchTimer = null; }
   currentTab = tab;
   ['game','leaderboard','history'].forEach((t) => {
     document.getElementById('panel-' + t).classList.toggle('active', t === tab);
@@ -1052,6 +1060,43 @@ function render() {
     streakBar.style.display = 'none';
   }
 
+  // Win detection: initialize seen rounds on first render, then watch for new wins
+  if (seenEndedRounds === null) {
+    seenEndedRounds = new Set();
+    for (const t of TRACKS) {
+      for (const pr of ((gameState.tracks[t] || {}).pastRounds || [])) {
+        seenEndedRounds.add(pr.id);
+      }
+    }
+  } else if (myAddress && !winAutoSwitchTimer) {
+    for (const t of TRACKS) {
+      for (const pr of ((gameState.tracks[t] || {}).pastRounds || [])) {
+        if (!seenEndedRounds.has(pr.id)) {
+          seenEndedRounds.add(pr.id);
+          if (pr.winner === myAddress && currentTab === 'game') {
+            const winTrack = t;
+            winAutoSwitchTimer = setTimeout(() => {
+              winAutoSwitchTimer = null;
+              if (currentTab !== 'game') return;
+              // Switch to leaderboard without triggering switchTab's timer-cancel
+              currentTab = 'leaderboard';
+              ['game','leaderboard','history'].forEach((tab) => {
+                document.getElementById('panel-' + tab).classList.toggle('active', tab === 'leaderboard');
+                document.getElementById('nav-' + tab).classList.toggle('active', tab === 'leaderboard');
+              });
+              setLbTrack(winTrack);
+              renderLeaderboard();
+              setTimeout(() => {
+                const myRow = document.querySelector('#leaderboard-list .lb-row.is-me');
+                if (myRow) myRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }, 50);
+            }, 2000);
+          }
+        }
+      }
+    }
+  }
+
   renderGamePanel(round);
   renderLeaderboard();
   renderHistory();
@@ -1199,8 +1244,13 @@ function renderLeaderboard() {
   const stats = td.playerStats || {};
   const entries = Object.entries(stats)
     .map(([pubkey, s]) => ({ pubkey, ...s }))
-    .filter((e) => e.won > 0 || e.tokensWon > 0)
-    .sort((a, b) => b.won - a.won || b.tokensWon - a.tokensWon);
+    .filter((e) => e.bestWinGuessCount != null)
+    .sort((a, b) =>
+      a.bestWinGuessCount - b.bestWinGuessCount ||
+      b.won - a.won ||
+      b.tokensWon - a.tokensWon
+    )
+    .slice(0, 10);
 
   const container = document.getElementById('leaderboard-list');
   if (!entries.length) {
@@ -1213,12 +1263,15 @@ function renderLeaderboard() {
     const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
     const name = getName(e.pubkey);
     const isMe = e.pubkey === myAddress;
+    const bestWin = e.bestWinGuessCount === 1 ? '1 guess' : e.bestWinGuessCount + ' guesses';
     const best = e.bestDist != null ? e.bestDist + ' off' : '—';
     return '<div class="lb-row' + (isMe ? ' is-me' : '') + '">' +
       '<div class="lb-rank ' + rankClass + '">' + rank + '</div>' +
-      '<div class="lb-name">' + escapeHtml(name) + (isMe ? ' (you)' : '') + '</div>' +
-      '<div class="lb-stats"><strong>' + e.won + ' win' + (e.won !== 1 ? 's' : '') + '</strong>' +
-      e.tokensWon + ' tokens · best: ' + best + '</div>' +
+      '<div class="lb-info">' +
+        '<div class="lb-name">' + escapeHtml(name) + (isMe ? ' <strong>(you)</strong>' : '') + '</div>' +
+        '<div class="lb-meta">' + e.won + ' win' + (e.won !== 1 ? 's' : '') + ' · ' + e.tokensWon + ' tokens · best: ' + best + '</div>' +
+      '</div>' +
+      '<div class="lb-best-win"><span>' + bestWin + '</span><small>best win</small></div>' +
       '</div>';
   }).join('');
 }

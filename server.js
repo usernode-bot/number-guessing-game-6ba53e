@@ -138,6 +138,18 @@ function injectStagingSeeds() {
     '00000020' + 'a'.repeat(56), // round 7, secret=33
     '00000042' + 'c'.repeat(56), // round 9, secret=67
     '0000002c' + 'd'.repeat(56), // round 10, secret=45
+    // New rounds for leaderboard demonstration (rounds 20-30, 1d track, multi-guess)
+    '00000100' + '1'.repeat(56), // round 20
+    '00000101' + '2'.repeat(56), // round 21
+    '00000102' + '3'.repeat(56), // round 22
+    '00000103' + '4'.repeat(56), // round 23
+    '00000104' + '5'.repeat(56), // round 24
+    '00000105' + '6'.repeat(56), // round 25
+    '00000106' + '7'.repeat(56), // round 26
+    '00000107' + '8'.repeat(56), // round 27
+    '00000108' + '9'.repeat(56), // round 28
+    '00000109' + 'e'.repeat(56), // round 29
+    '0000010a' + 'f'.repeat(56), // round 30
   ];
 
   // Active round hashes (secret doesn't matter for active rounds)
@@ -150,6 +162,14 @@ function injectStagingSeeds() {
   const p1 = 'utpk1stagingplayer000000000000000000000000000000000000000001';
   const p2 = 'utpk1stagingplayer000000000000000000000000000000000000000002';
   const p3 = 'utpk1stagingplayer000000000000000000000000000000000000000003';
+  const p4 = 'utpk1stagingplayer000000000000000000000000000000000000000004';
+  const p5 = 'utpk1stagingplayer000000000000000000000000000000000000000005';
+  const p6 = 'utpk1stagingplayer000000000000000000000000000000000000000006';
+  const p7 = 'utpk1stagingplayer000000000000000000000000000000000000000007';
+  const p8 = 'utpk1stagingplayer000000000000000000000000000000000000000008';
+  const p9 = 'utpk1stagingplayer000000000000000000000000000000000000000009';
+  const p10 = 'utpk1stagingplayer00000000000000000000000000000000000000000a';
+  const p11 = 'utpk1stagingplayer00000000000000000000000000000000000000000b';
 
   // Round 4: TIMED + HARD MODE — 2-minute timer started 2 hours ago → already expired on boot.
   const r4StartMs = now - 2 * hour;
@@ -237,10 +257,140 @@ function injectStagingSeeds() {
     { id: 'staging-r12-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 12, guess: 25 }), timestamp_ms: now - hour - 30 * 60000 },
     { id: 'staging-r12-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 12, guess: 60 }), timestamp_ms: now - hour },
 
+    // ---- Extra 1D rounds for leaderboard demonstration (multi-guess, varied bestWinGuessCount) ----
+    // Rounds 20–30: 11 completed 1d rounds, each ~1 day long, placed 20–30 days in the past.
+    // p4: wins rounds 20 (1 guess) + 23 (3 guesses) + 27 (2 guesses) → bestWinGuessCount=1, 3 wins
+    // p5: wins rounds 21 (1 guess) + 25 (4 guesses) → bestWinGuessCount=1, 2 wins
+    // p6: wins round 22 with 3 guesses → bestWinGuessCount=3
+    // p7: wins round 24 with 4 guesses → bestWinGuessCount=4
+    // p8: wins round 26 with 4 guesses → bestWinGuessCount=4 (tied with p7)
+    // p9: wins round 28 with 7 guesses → bestWinGuessCount=7
+    // p10: wins round 29 with 8 guesses → bestWinGuessCount=8
+    // p11: wins round 30 with 9 guesses → bestWinGuessCount=9 (11th, outside top-10)
+
+    // Round 20 — p4 wins with 1 guess (bullseye on secret=50)
+    { id: 'staging-r20-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 20, seed_hash: seedHashes[9], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 30 * day },
+    { id: 'staging-r20-g1', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 20, guess: 50 }), timestamp_ms: now - 30 * day + hour },
+    { id: 'staging-r20-g2', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 20, guess: 40 }), timestamp_ms: now - 30 * day + 2 * hour },
+    { id: 'staging-r20-g3', to: APP_PUBKEY, from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 20, guess: 60 }), timestamp_ms: now - 30 * day + 3 * hour },
+    { id: 'staging-r20-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 20, secret: 50, winner: p4, winner_guess: 50, pot: 3, participants: 3 }), timestamp_ms: now - 29 * day },
+
+    // Round 21 — p5 wins with 1 guess (bullseye on secret=70)
+    { id: 'staging-r21-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 21, seed_hash: seedHashes[10], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 29 * day },
+    { id: 'staging-r21-g1', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 21, guess: 70 }), timestamp_ms: now - 29 * day + hour },
+    { id: 'staging-r21-g2', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 21, guess: 65 }), timestamp_ms: now - 29 * day + 2 * hour },
+    { id: 'staging-r21-g3', to: APP_PUBKEY, from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 21, guess: 75 }), timestamp_ms: now - 29 * day + 3 * hour },
+    { id: 'staging-r21-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 21, secret: 70, winner: p5, winner_guess: 70, pot: 3, participants: 3 }), timestamp_ms: now - 28 * day },
+
+    // Round 22 — p6 wins with 3 guesses (secret=30; guesses: 50→40→30)
+    { id: 'staging-r22-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 22, seed_hash: seedHashes[11], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 28 * day },
+    { id: 'staging-r22-g1', to: APP_PUBKEY, from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 22, guess: 50 }), timestamp_ms: now - 28 * day + hour },
+    { id: 'staging-r22-g2', to: APP_PUBKEY, from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 22, guess: 40 }), timestamp_ms: now - 28 * day + 2 * hour },
+    { id: 'staging-r22-g3', to: APP_PUBKEY, from_pubkey: p7, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 22, guess: 32 }), timestamp_ms: now - 28 * day + 3 * hour },
+    { id: 'staging-r22-g4', to: APP_PUBKEY, from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 22, guess: 30 }), timestamp_ms: now - 28 * day + 4 * hour },
+    { id: 'staging-r22-g5', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 22, guess: 28 }), timestamp_ms: now - 28 * day + 5 * hour },
+    { id: 'staging-r22-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 22, secret: 30, winner: p6, winner_guess: 30, pot: 5, participants: 3 }), timestamp_ms: now - 27 * day },
+
+    // Round 23 — p4 wins with 3 guesses (2nd win; bestWinGuessCount stays 1 from round 20; secret=45)
+    { id: 'staging-r23-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 23, seed_hash: seedHashes[12], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 27 * day },
+    { id: 'staging-r23-g1', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 23, guess: 60 }), timestamp_ms: now - 27 * day + hour },
+    { id: 'staging-r23-g2', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 23, guess: 50 }), timestamp_ms: now - 27 * day + 2 * hour },
+    { id: 'staging-r23-g3', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 23, guess: 43 }), timestamp_ms: now - 27 * day + 3 * hour },
+    { id: 'staging-r23-g4', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 23, guess: 45 }), timestamp_ms: now - 27 * day + 4 * hour },
+    { id: 'staging-r23-g5', to: APP_PUBKEY, from_pubkey: p7, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 23, guess: 47 }), timestamp_ms: now - 27 * day + 5 * hour },
+    { id: 'staging-r23-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 23, secret: 45, winner: p4, winner_guess: 45, pot: 5, participants: 3 }), timestamp_ms: now - 26 * day },
+
+    // Round 24 — p7 wins with 4 guesses (secret=75; guesses: 50→60→70→75)
+    { id: 'staging-r24-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 24, seed_hash: seedHashes[13], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 26 * day },
+    { id: 'staging-r24-g1', to: APP_PUBKEY, from_pubkey: p7, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 24, guess: 50 }), timestamp_ms: now - 26 * day + hour },
+    { id: 'staging-r24-g2', to: APP_PUBKEY, from_pubkey: p7, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 24, guess: 60 }), timestamp_ms: now - 26 * day + 2 * hour },
+    { id: 'staging-r24-g3', to: APP_PUBKEY, from_pubkey: p8, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 24, guess: 73 }), timestamp_ms: now - 26 * day + 3 * hour },
+    { id: 'staging-r24-g4', to: APP_PUBKEY, from_pubkey: p7, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 24, guess: 70 }), timestamp_ms: now - 26 * day + 4 * hour },
+    { id: 'staging-r24-g5', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 24, guess: 77 }), timestamp_ms: now - 26 * day + 5 * hour },
+    { id: 'staging-r24-g6', to: APP_PUBKEY, from_pubkey: p7, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 24, guess: 75 }), timestamp_ms: now - 26 * day + 6 * hour },
+    { id: 'staging-r24-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 24, secret: 75, winner: p7, winner_guess: 75, pot: 6, participants: 3 }), timestamp_ms: now - 25 * day },
+
+    // Round 25 — p5 wins with 4 guesses (2nd win; bestWinGuessCount stays 1 from round 21; secret=60)
+    { id: 'staging-r25-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 25, seed_hash: seedHashes[14], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 25 * day },
+    { id: 'staging-r25-g1', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 25, guess: 50 }), timestamp_ms: now - 25 * day + hour },
+    { id: 'staging-r25-g2', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 25, guess: 40 }), timestamp_ms: now - 25 * day + 2 * hour },
+    { id: 'staging-r25-g3', to: APP_PUBKEY, from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 25, guess: 58 }), timestamp_ms: now - 25 * day + 3 * hour },
+    { id: 'staging-r25-g4', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 25, guess: 55 }), timestamp_ms: now - 25 * day + 4 * hour },
+    { id: 'staging-r25-g5', to: APP_PUBKEY, from_pubkey: p8, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 25, guess: 62 }), timestamp_ms: now - 25 * day + 5 * hour },
+    { id: 'staging-r25-g6', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 25, guess: 60 }), timestamp_ms: now - 25 * day + 6 * hour },
+    { id: 'staging-r25-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 25, secret: 60, winner: p5, winner_guess: 60, pot: 6, participants: 3 }), timestamp_ms: now - 24 * day },
+
+    // Round 26 — p8 wins with 4 guesses (secret=35; guesses: 50→40→37→35)
+    { id: 'staging-r26-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 26, seed_hash: seedHashes[15], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 24 * day },
+    { id: 'staging-r26-g1', to: APP_PUBKEY, from_pubkey: p8, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 26, guess: 50 }), timestamp_ms: now - 24 * day + hour },
+    { id: 'staging-r26-g2', to: APP_PUBKEY, from_pubkey: p8, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 26, guess: 40 }), timestamp_ms: now - 24 * day + 2 * hour },
+    { id: 'staging-r26-g3', to: APP_PUBKEY, from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 26, guess: 33 }), timestamp_ms: now - 24 * day + 3 * hour },
+    { id: 'staging-r26-g4', to: APP_PUBKEY, from_pubkey: p8, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 26, guess: 37 }), timestamp_ms: now - 24 * day + 4 * hour },
+    { id: 'staging-r26-g5', to: APP_PUBKEY, from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 26, guess: 38 }), timestamp_ms: now - 24 * day + 5 * hour },
+    { id: 'staging-r26-g6', to: APP_PUBKEY, from_pubkey: p8, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 26, guess: 35 }), timestamp_ms: now - 24 * day + 6 * hour },
+    { id: 'staging-r26-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 26, secret: 35, winner: p8, winner_guess: 35, pot: 6, participants: 3 }), timestamp_ms: now - 23 * day },
+
+    // Round 27 — p4 wins with 2 guesses (3rd win; bestWinGuessCount stays 1; secret=80)
+    { id: 'staging-r27-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 27, seed_hash: seedHashes[16], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 23 * day },
+    { id: 'staging-r27-g1', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 27, guess: 60 }), timestamp_ms: now - 23 * day + hour },
+    { id: 'staging-r27-g2', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 27, guess: 78 }), timestamp_ms: now - 23 * day + 2 * hour },
+    { id: 'staging-r27-g3', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 27, guess: 80 }), timestamp_ms: now - 23 * day + 3 * hour },
+    { id: 'staging-r27-g4', to: APP_PUBKEY, from_pubkey: p8, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 27, guess: 82 }), timestamp_ms: now - 23 * day + 4 * hour },
+    { id: 'staging-r27-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 27, secret: 80, winner: p4, winner_guess: 80, pot: 4, participants: 3 }), timestamp_ms: now - 22 * day },
+
+    // Round 28 — p9 wins with 7 guesses (secret=55; binary-search style)
+    { id: 'staging-r28-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 28, seed_hash: seedHashes[17], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 22 * day },
+    { id: 'staging-r28-g1', to: APP_PUBKEY, from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 28, guess: 30 }), timestamp_ms: now - 22 * day + hour },
+    { id: 'staging-r28-g2', to: APP_PUBKEY, from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 28, guess: 40 }), timestamp_ms: now - 22 * day + 2 * hour },
+    { id: 'staging-r28-g3', to: APP_PUBKEY, from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 28, guess: 53 }), timestamp_ms: now - 22 * day + 3 * hour },
+    { id: 'staging-r28-g4', to: APP_PUBKEY, from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 28, guess: 50 }), timestamp_ms: now - 22 * day + 4 * hour },
+    { id: 'staging-r28-g5', to: APP_PUBKEY, from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 28, guess: 60 }), timestamp_ms: now - 22 * day + 5 * hour },
+    { id: 'staging-r28-g6', to: APP_PUBKEY, from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 28, guess: 57 }), timestamp_ms: now - 22 * day + 6 * hour },
+    { id: 'staging-r28-g7', to: APP_PUBKEY, from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 28, guess: 56 }), timestamp_ms: now - 22 * day + 7 * hour },
+    { id: 'staging-r28-g8', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 28, guess: 57 }), timestamp_ms: now - 22 * day + 8 * hour },
+    { id: 'staging-r28-g9', to: APP_PUBKEY, from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 28, guess: 55 }), timestamp_ms: now - 22 * day + 9 * hour },
+    { id: 'staging-r28-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 28, secret: 55, winner: p9, winner_guess: 55, pot: 9, participants: 3 }), timestamp_ms: now - 21 * day },
+
+    // Round 29 — p10 wins with 8 guesses (secret=40)
+    { id: 'staging-r29-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 29, seed_hash: seedHashes[18], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 21 * day },
+    { id: 'staging-r29-g1', to: APP_PUBKEY, from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 50 }), timestamp_ms: now - 21 * day + hour },
+    { id: 'staging-r29-g2', to: APP_PUBKEY, from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 60 }), timestamp_ms: now - 21 * day + 2 * hour },
+    { id: 'staging-r29-g3', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 38 }), timestamp_ms: now - 21 * day + 3 * hour },
+    { id: 'staging-r29-g4', to: APP_PUBKEY, from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 45 }), timestamp_ms: now - 21 * day + 4 * hour },
+    { id: 'staging-r29-g5', to: APP_PUBKEY, from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 42 }), timestamp_ms: now - 21 * day + 5 * hour },
+    { id: 'staging-r29-g6', to: APP_PUBKEY, from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 42 }), timestamp_ms: now - 21 * day + 6 * hour },
+    { id: 'staging-r29-g7', to: APP_PUBKEY, from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 41 }), timestamp_ms: now - 21 * day + 7 * hour },
+    { id: 'staging-r29-g8', to: APP_PUBKEY, from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 43 }), timestamp_ms: now - 21 * day + 8 * hour },
+    { id: 'staging-r29-g9', to: APP_PUBKEY, from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 44 }), timestamp_ms: now - 21 * day + 9 * hour },
+    { id: 'staging-r29-g10', to: APP_PUBKEY, from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 29, guess: 40 }), timestamp_ms: now - 21 * day + 10 * hour },
+    { id: 'staging-r29-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 29, secret: 40, winner: p10, winner_guess: 40, pot: 10, participants: 3 }), timestamp_ms: now - 20 * day },
+
+    // Round 30 — p11 wins with 9 guesses (secret=65; 11th place — outside top-10 cap)
+    { id: 'staging-r30-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 30, seed_hash: seedHashes[19], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 20 * day },
+    { id: 'staging-r30-g1', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 50 }), timestamp_ms: now - 20 * day + hour },
+    { id: 'staging-r30-g2', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 60 }), timestamp_ms: now - 20 * day + 2 * hour },
+    { id: 'staging-r30-g3', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 55 }), timestamp_ms: now - 20 * day + 3 * hour },
+    { id: 'staging-r30-g4', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 58 }), timestamp_ms: now - 20 * day + 4 * hour },
+    { id: 'staging-r30-g5', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 62 }), timestamp_ms: now - 20 * day + 5 * hour },
+    { id: 'staging-r30-g6', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 63 }), timestamp_ms: now - 20 * day + 6 * hour },
+    { id: 'staging-r30-g7', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 64 }), timestamp_ms: now - 20 * day + 7 * hour },
+    { id: 'staging-r30-g8', to: APP_PUBKEY, from_pubkey: p8, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 63 }), timestamp_ms: now - 20 * day + 8 * hour },
+    { id: 'staging-r30-g9', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 66 }), timestamp_ms: now - 20 * day + 9 * hour },
+    { id: 'staging-r30-g10', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 65 }), timestamp_ms: now - 20 * day + 10 * hour },
+    { id: 'staging-r30-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 30, secret: 65, winner: p11, winner_guess: 65, pot: 10, participants: 2 }), timestamp_ms: now - 19 * day },
+
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
     { id: 'staging-u2', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'bob_s' }), timestamp_ms: now - 3 * day },
     { id: 'staging-u3', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'carol_s' }), timestamp_ms: now - 3 * day },
+    { id: 'staging-u4', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'dave_s' }), timestamp_ms: now - 31 * day },
+    { id: 'staging-u5', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'eve_s' }), timestamp_ms: now - 31 * day },
+    { id: 'staging-u6', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'frank_s' }), timestamp_ms: now - 31 * day },
+    { id: 'staging-u7', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p7, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'grace_s' }), timestamp_ms: now - 31 * day },
+    { id: 'staging-u8', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p8, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'henry_s' }), timestamp_ms: now - 31 * day },
+    { id: 'staging-u9', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'iris_s' }), timestamp_ms: now - 31 * day },
+    { id: 'staging-u10', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'jake_s' }), timestamp_ms: now - 31 * day },
+    { id: 'staging-u11', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'kate_s' }), timestamp_ms: now - 31 * day },
   ];
 
   for (const tx of fakeTxs) {
