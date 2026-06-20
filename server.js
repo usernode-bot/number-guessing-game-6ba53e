@@ -57,6 +57,7 @@ const PUBLIC_PREFIXES = [
   EXPLORER_PROXY_PREFIX,
   '/__usernode/',
   '/__usernames/',
+  '/__mock/',
   '/usernode-bridge.js',
   '/usernode-loading.js',
   '/usernode-usernames.js',
