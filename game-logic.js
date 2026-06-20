@@ -92,6 +92,7 @@ function createGame(opts) {
       startedAt: tx.ts,
       endsAt: tx.ts + activeDurationMs,
       guesses: [],
+      rawGuessCounts: {},
       endedAt: null,
       secret: null,
       winner: null,
@@ -112,6 +113,7 @@ function createGame(opts) {
     const playerGuessCount = round.guesses.filter((g) => g.from === tx.from).length;
     if (playerGuessCount >= round.maxGuessesPerPlayer) return;
     round.guesses.push({ from: tx.from, amount: tx.amount, guess, ts: tx.ts });
+    round.rawGuessCounts[tx.from] = (round.rawGuessCounts[tx.from] || 0) + 1;
   }
 
   function handleEndRound(memo, tx) {
@@ -188,14 +190,18 @@ function createGame(opts) {
       if (r.durationTrack !== track) continue;
       const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash) : null);
       const w = r.winner;
-      if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity };
+      if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
       stats[w].won++;
       stats[w].tokensWon += r.pot || 0;
       if (secret != null && r.winnerGuess != null) {
         stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
       }
+      const winGuessCount = r.rawGuessCounts ? (r.rawGuessCounts[w] || 1) : 1;
+      stats[w].bestWinGuessCount = stats[w].bestWinGuessCount === null
+        ? winGuessCount
+        : Math.min(stats[w].bestWinGuessCount, winGuessCount);
       for (const g of r.guesses) {
-        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity };
+        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
         if (secret != null) {
           stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
         }

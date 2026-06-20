@@ -68,6 +68,11 @@
       "name": "State endpoint includes all four tracks",
       "path": "/__numguess/state",
       "expectText": "\"1w\""
+    },
+    {
+      "name": "State endpoint includes bestWinGuessCount in player stats",
+      "path": "/__numguess/state",
+      "expectText": "bestWinGuessCount"
     }
   ]
 }
