@@ -41,7 +41,7 @@ let pendingRoundConfig = { timedMode: false, hardMode: false };
 // Auth middleware
 // ---------------------------------------------------------------------------
 
-const PUBLIC_API_PATHS = new Set(['/health', '/__numguess/state']);
+const PUBLIC_API_PATHS = new Set(['/health', '/__numguess/state', '/favicon.ico']);
 const PUBLIC_PREFIXES = [
   EXPLORER_PROXY_PREFIX,
   '/__usernode/',
@@ -543,6 +543,12 @@ app.post('/__numguess/admin/start', async (req, res) => {
 
 // Mock-enabled probe — always respond so the bridge doesn't fall through to the 401 catch-all
 app.get('/__mock/enabled', (_req, res) => res.json({ enabled: !!mockApi }));
+
+// Favicon — serve as SVG so the browser stops logging 401s for this automatic request
+const FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎯</text></svg>';
+app.get('/favicon.ico', (_req, res) => {
+  res.set('content-type', 'image/svg+xml').set('cache-control', 'public, max-age=86400').send(FAVICON_SVG);
+});
 
 // Static assets — index:false so index.html is gated by JWT in the catch-all below
 app.use(express.static(path.join(__dirname, 'public'), { index: false }));
