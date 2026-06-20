@@ -167,6 +167,7 @@
       background: var(--bg-card); border: 1px solid var(--border); color: var(--text-muted);
     }
     .mode-badge.timed { border-color: rgba(239,68,68,0.5); color: #f87171; }
+    .mode-badge.duration { border-color: rgba(59,130,246,0.5); color: #60a5fa; }
     .mode-badge.hard { border-color: rgba(234,179,8,0.5); color: #ca8a04; }
     .countdown { font-size: .85rem; font-weight: 600; color: var(--accent-light); font-variant-numeric: tabular-nums; flex: 1; text-align: center; }
     .countdown.urgent { color: #ef4444; }
@@ -451,7 +452,7 @@
     <!-- Round bar -->
     <div class="card round-bar" id="round-bar">
       <span class="round-badge" id="round-badge">Round —</span>
-      <span id="timed-badge" class="mode-badge timed" style="display:none">⏱ Timed</span>
+      <span id="duration-badge" class="mode-badge" style="display:none"></span>
       <span id="mode-badge" class="mode-badge" style="display:none">Normal</span>
       <span class="countdown" id="countdown">—</span>
       <span class="players-info" id="players-info">— players · — tokens</span>
@@ -577,12 +578,13 @@
     <div class="modal-title">⚙ Set Next Round Mode</div>
     <div class="mode-picker-note">Settings apply when the next round starts. Any logged-in player can set this.</div>
 
-    <div class="toggle-row">
-      <span>⏱ Timed Mode (60 seconds)</span>
-      <label class="toggle-switch">
-        <input type="checkbox" id="mode-timed-toggle">
-        <span class="toggle-slider"></span>
-      </label>
+    <div class="mode-section-label">Round duration</div>
+    <div class="segment">
+      <button class="seg-btn" id="seg-dur-60s" onclick="setDuration('timed')">60s</button>
+      <button class="seg-btn" id="seg-dur-1h" onclick="setDuration('1h')">1h</button>
+      <button class="seg-btn" id="seg-dur-6h" onclick="setDuration('6h')">6h</button>
+      <button class="seg-btn active" id="seg-dur-1d" onclick="setDuration('1d')">1d</button>
+      <button class="seg-btn" id="seg-dur-1w" onclick="setDuration('1w')">1w</button>
     </div>
 
     <div class="mode-section-label">Guess limit per player</div>
@@ -617,6 +619,7 @@ let prevEndedAt = null;
 let prevStreakValue = -1;
 let prevCountdownRemaining = Infinity;
 let pickerSegment = 'normal';
+let pickerDuration = '1d';
 
 // ---- Theme ----
 function toggleTheme() {
@@ -843,12 +846,17 @@ async function saveUsername() {
 }
 
 // ---- Mode picker ----
+const DURATION_SEG_IDS = { 'timed': 'seg-dur-60s', '1h': 'seg-dur-1h', '6h': 'seg-dur-6h', '1d': 'seg-dur-1d', '1w': 'seg-dur-1w' };
+
 function openModePicker() {
   const modal = document.getElementById('mode-picker-modal');
   modal.classList.add('open');
-  const config = (gameState && gameState.pendingRoundConfig) || { timedMode: false, hardMode: false };
-  document.getElementById('mode-timed-toggle').checked = !!config.timedMode;
+  const config = (gameState && gameState.pendingRoundConfig) || { duration: '1d', hardMode: false };
+  pickerDuration = config.duration || '1d';
   pickerSegment = config.hardMode ? 'hard' : 'normal';
+  Object.entries(DURATION_SEG_IDS).forEach(([d, id]) => {
+    document.getElementById(id).classList.toggle('active', d === pickerDuration);
+  });
   document.getElementById('seg-normal').classList.toggle('active', !config.hardMode);
   document.getElementById('seg-hard').classList.toggle('active', !!config.hardMode);
 }
@@ -861,6 +869,13 @@ document.getElementById('mode-picker-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeModePicker();
 });
 
+function setDuration(dur) {
+  pickerDuration = dur;
+  Object.entries(DURATION_SEG_IDS).forEach(([d, id]) => {
+    document.getElementById(id).classList.toggle('active', d === dur);
+  });
+}
+
 function setSegment(mode) {
   pickerSegment = mode;
   document.getElementById('seg-normal').classList.toggle('active', mode === 'normal');
@@ -868,7 +883,6 @@ function setSegment(mode) {
 }
 
 async function saveMode() {
-  const timedMode = document.getElementById('mode-timed-toggle').checked;
   const hardMode = pickerSegment === 'hard';
   const btn = document.getElementById('mode-save-btn');
   btn.disabled = true;
@@ -880,7 +894,7 @@ async function saveMode() {
         'content-type': 'application/json',
         'x-usernode-token': window._ngToken || '',
       },
-      body: JSON.stringify({ timedMode, hardMode }),
+      body: JSON.stringify({ duration: pickerDuration, hardMode }),
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     closeModePicker();
@@ -938,11 +952,20 @@ function render() {
       round.participants + ' player' + (round.participants !== 1 ? 's' : '') +
       ' · ' + round.pot + ' token' + (round.pot !== 1 ? 's' : '');
 
-    // Timed badge
-    const timedBadge = document.getElementById('timed-badge');
-    timedBadge.style.display = round.mode === 'timed' ? '' : 'none';
+    // Duration badge (always shown for active rounds)
+    const durationBadge = document.getElementById('duration-badge');
+    const durMs = round.activeDurationMs;
+    let durLabel, durCls;
+    if (!durMs || durMs <= 60000) { durLabel = '60s'; durCls = 'timed'; }
+    else if (durMs <= 3600000) { durLabel = '1h'; durCls = 'duration'; }
+    else if (durMs <= 21600000) { durLabel = '6h'; durCls = 'duration'; }
+    else if (durMs <= 86400000) { durLabel = '1d'; durCls = 'duration'; }
+    else { durLabel = '1w'; durCls = 'duration'; }
+    durationBadge.className = 'mode-badge ' + durCls;
+    durationBadge.textContent = durLabel;
+    durationBadge.style.display = '';
 
-    // Mode badge (show for new multi-guess rounds)
+    // Mode badge (hard/normal for multi-guess rounds)
     const modeBadge = document.getElementById('mode-badge');
     const maxG = round.maxGuessesPerPlayer;
     if (maxG && maxG > 1) {
@@ -956,7 +979,7 @@ function render() {
   } else {
     document.getElementById('round-badge').textContent = 'No active round';
     document.getElementById('players-info').textContent = '';
-    document.getElementById('timed-badge').style.display = 'none';
+    document.getElementById('duration-badge').style.display = 'none';
     document.getElementById('mode-badge').style.display = 'none';
   }
 

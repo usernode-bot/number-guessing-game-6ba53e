@@ -48,6 +48,11 @@
       "name": "Game state endpoint returns data",
       "path": "/__numguess/state",
       "expectText": "appPubkey"
+    },
+    {
+      "name": "Duration badge renders on active round",
+      "path": "/__numguess/state",
+      "expectText": "activeDurationMs"
     }
   ]
 }

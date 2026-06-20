@@ -35,7 +35,7 @@ const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 const LOCAL_DEV = process.argv.includes('--local-dev');
 
 // Pending config for the next round to start
-let pendingRoundConfig = { timedMode: false, hardMode: false };
+let pendingRoundConfig = { duration: '1d', hardMode: false };
 
 // ---------------------------------------------------------------------------
 // Auth middleware
@@ -111,11 +111,15 @@ function injectStagingSeeds() {
   // secret = 75: need x % 100 == 74. Use hex "0000004a" = 74 in decimal.
   // secret = 23: need x % 100 == 22. Use hex "00000016" = 22 in decimal.
   // secret = 28: need x % 100 == 27. Use hex "0000007f" = 127 in decimal (127 % 100 = 27).
+  // secret = 61: need x % 100 == 60. Use hex "0000003c" = 60 in decimal.
+  // secret = 50: need x % 100 == 49. Use hex "00000031" = 49 in decimal.
   const seedHashes = [
     '00000029aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001',
     '0000004abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0002',
     '00000016cccccccccccccccccccccccccccccccccccccccccccccccccccc0003',
     '0000007fdddddddddddddddddddddddddddddddddddddddddddddddddddd0004',
+    '0000003ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0005',
+    '00000031ffffffffffffffffffffffffffffffffffffffffffffffffffff0006',
   ];
 
   const p1 = 'utpk1stagingplayer000000000000000000000000000000000000000001';
@@ -155,6 +159,20 @@ function injectStagingSeeds() {
     { id: 'staging-r4-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 4, guess: 55 }), timestamp_ms: r4StartMs + 1000 },
     { id: 'staging-r4-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 4, guess: 70 }), timestamp_ms: r4StartMs + 2000 },
     { id: 'staging-r4-g3', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 4, guess: 60 }), timestamp_ms: r4StartMs + 5000 },
+    { id: 'staging-r4-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 4, secret: 28, winner: p1, winner_guess: 55, pot: 3, participants: 2 }), timestamp_ms: r4StartMs + r4DurationMs + 1000 },
+
+    // Round 5 — 1-HOUR window (ended); secret=61; alice_s wins with guess 60 (distance 1)
+    { id: 'staging-r5-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 5, seed_hash: seedHashes[4], active_duration_ms: 3600000, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal' }), timestamp_ms: now - 3 * 3600000 },
+    { id: 'staging-r5-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 5, guess: 60 }), timestamp_ms: now - 3 * 3600000 + 600000 },
+    { id: 'staging-r5-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 5, guess: 65 }), timestamp_ms: now - 3 * 3600000 + 900000 },
+    { id: 'staging-r5-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 5, guess: 55 }), timestamp_ms: now - 3 * 3600000 + 1200000 },
+    { id: 'staging-r5-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 5, secret: 61, winner: p1, winner_guess: 60, pot: 3, participants: 3 }), timestamp_ms: now - 2 * 3600000 },
+
+    // Round 6 — 1-WEEK window (active, started 30 min ago); alice_s=33, bob_s=55, carol_s=80
+    { id: 'staging-r6-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 6, seed_hash: seedHashes[5], active_duration_ms: 604800000, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal' }), timestamp_ms: now - 30 * 60000 },
+    { id: 'staging-r6-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 6, guess: 33 }), timestamp_ms: now - 25 * 60000 },
+    { id: 'staging-r6-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 6, guess: 55 }), timestamp_ms: now - 20 * 60000 },
+    { id: 'staging-r6-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 6, guess: 80 }), timestamp_ms: now - 15 * 60000 },
 
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
@@ -364,12 +382,21 @@ async function postStartRound() {
 
   // Consume pending config then reset
   const config = { ...pendingRoundConfig };
-  pendingRoundConfig = { timedMode: false, hardMode: false };
+  pendingRoundConfig = { duration: '1d', hardMode: false };
 
-  const activeDurationMs = config.timedMode ? ROUND_TIMED_MS : TIMER_DURATION_MS;
+  const dur = config.duration || '1d';
+  const isTimedMode = dur === 'timed';
+  const DURATION_MAP = {
+    'timed': ROUND_TIMED_MS,
+    '1h':    3600000,
+    '6h':    21600000,
+    '1d':    TIMER_DURATION_MS,
+    '1w':    604800000,
+  };
+  const activeDurationMs = DURATION_MAP[dur] || TIMER_DURATION_MS;
   const maxGuessesPerPlayer = config.hardMode ? 5 : 10;
-  const roundMode = config.timedMode ? 'timed' : 'normal';
-  const roundMinPlayers = config.timedMode ? 0 : MIN_PLAYERS;
+  const roundMode = isTimedMode ? 'timed' : 'normal';
+  const roundMinPlayers = isTimedMode ? 0 : MIN_PLAYERS;
 
   const seedHash = crypto.randomBytes(32).toString('hex');
   const memo = {
@@ -520,11 +547,16 @@ app.get('/__numguess/state', async (req, res) => {
   res.json(state);
 });
 
+const VALID_DURATIONS = new Set(['timed', '1h', '6h', '1d', '1w']);
+
 // Admin: set mode for next round
 app.post('/__numguess/admin/set-mode', (req, res) => {
-  const { timedMode, hardMode } = req.body || {};
+  const { duration, hardMode } = req.body || {};
+  if (!VALID_DURATIONS.has(duration)) {
+    return res.status(400).json({ error: 'Invalid duration. Must be one of: timed, 1h, 6h, 1d, 1w' });
+  }
   pendingRoundConfig = {
-    timedMode: !!timedMode,
+    duration,
     hardMode: !!hardMode,
   };
   console.log('[admin] pendingRoundConfig updated:', pendingRoundConfig);
