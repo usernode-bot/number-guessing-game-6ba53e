@@ -142,6 +142,8 @@
       -webkit-backdrop-filter: blur(12px);
       box-shadow: var(--shadow);
     }
+    /* ---- Track selector ---- */
+    .track-selector { margin-bottom: .75rem; }
     /* ---- Streak bar ---- */
     .streak-bar {
       display: flex; align-items: center; justify-content: space-around;
@@ -443,6 +445,14 @@
   <!-- Game Panel -->
   <div class="panel active" id="panel-game">
 
+    <!-- Track selector -->
+    <div class="segment track-selector" id="game-track-selector">
+      <button class="seg-btn" id="gs-1h" onclick="setGameTrack('1h')">1H</button>
+      <button class="seg-btn" id="gs-6h" onclick="setGameTrack('6h')">6H</button>
+      <button class="seg-btn active" id="gs-1d" onclick="setGameTrack('1d')">1D</button>
+      <button class="seg-btn" id="gs-1w" onclick="setGameTrack('1w')">1W</button>
+    </div>
+
     <!-- Streak widget -->
     <div class="streak-bar card" id="streak-bar" style="display:none">
       <span>🔥 Streak <strong id="streak-current">0</strong></span>
@@ -520,6 +530,12 @@
 
   <!-- Leaderboard Panel -->
   <div class="panel" id="panel-leaderboard">
+    <div class="segment track-selector" id="lb-track-selector">
+      <button class="seg-btn" id="lb-1h" onclick="setLbTrack('1h')">1H</button>
+      <button class="seg-btn" id="lb-6h" onclick="setLbTrack('6h')">6H</button>
+      <button class="seg-btn active" id="lb-1d" onclick="setLbTrack('1d')">1D</button>
+      <button class="seg-btn" id="lb-1w" onclick="setLbTrack('1w')">1W</button>
+    </div>
     <div class="section-header">All-time leaderboard</div>
     <div class="card" id="leaderboard-list">
       <div class="empty-state">
@@ -531,6 +547,12 @@
 
   <!-- History Panel -->
   <div class="panel" id="panel-history">
+    <div class="segment track-selector" id="hs-track-selector">
+      <button class="seg-btn" id="hs-1h" onclick="setHistTrack('1h')">1H</button>
+      <button class="seg-btn" id="hs-6h" onclick="setHistTrack('6h')">6H</button>
+      <button class="seg-btn active" id="hs-1d" onclick="setHistTrack('1d')">1D</button>
+      <button class="seg-btn" id="hs-1w" onclick="setHistTrack('1w')">1W</button>
+    </div>
     <div class="section-header">Past rounds</div>
     <div id="history-list">
       <div class="empty-state">
@@ -575,17 +597,8 @@
 <div class="modal-overlay" id="mode-picker-modal">
   <div class="modal">
     <button class="modal-close" onclick="closeModePicker()">✕</button>
-    <div class="modal-title">⚙ Set Next Round Mode</div>
-    <div class="mode-picker-note">Settings apply when the next round starts. Any logged-in player can set this.</div>
-
-    <div class="mode-section-label">Round duration</div>
-    <div class="segment">
-      <button class="seg-btn" id="seg-dur-60s" onclick="setDuration('timed')">60s</button>
-      <button class="seg-btn" id="seg-dur-1h" onclick="setDuration('1h')">1h</button>
-      <button class="seg-btn" id="seg-dur-6h" onclick="setDuration('6h')">6h</button>
-      <button class="seg-btn active" id="seg-dur-1d" onclick="setDuration('1d')">1d</button>
-      <button class="seg-btn" id="seg-dur-1w" onclick="setDuration('1w')">1w</button>
-    </div>
+    <div class="modal-title" id="mode-picker-title">⚙ Round Settings</div>
+    <div class="mode-picker-note">Settings apply when the next round starts for this track. Any logged-in player can set this.</div>
 
     <div class="mode-section-label">Guess limit per player</div>
     <div class="segment">
@@ -604,6 +617,7 @@ const TX_SEND_OPTS = { timeoutMs: 180000, pollIntervalMs: 1500 };
 const GAME_POLL_MS = 4000;
 const FAST_POLL_MS = 1000;
 const FAST_POLL_DURATION = 30000;
+const TRACKS = ['1h', '6h', '1d', '1w'];
 
 let myAddress = null;
 let myPubkey = null;
@@ -615,11 +629,14 @@ let currentTab = 'game';
 let fastPollEnd = 0;
 let pollTimer = null;
 let countdownTimer = null;
-let prevEndedAt = null;
+const prevEndedAt = { '1h': null, '6h': null, '1d': null, '1w': null };
 let prevStreakValue = -1;
 let prevCountdownRemaining = Infinity;
 let pickerSegment = 'normal';
-let pickerDuration = '1d';
+
+let selectedTrack = '1d';
+let selectedLbTrack = '1d';
+let selectedHistTrack = '1d';
 
 // ---- Theme ----
 function toggleTheme() {
@@ -642,6 +659,32 @@ function switchTab(tab) {
     document.getElementById('panel-' + t).classList.toggle('active', t === tab);
     document.getElementById('nav-' + t).classList.toggle('active', t === tab);
   });
+}
+
+// ---- Track selectors ----
+function setGameTrack(track) {
+  selectedTrack = track;
+  prevStreakValue = -1;
+  TRACKS.forEach((t) => {
+    document.getElementById('gs-' + t).classList.toggle('active', t === track);
+  });
+  if (gameState) render();
+}
+
+function setLbTrack(track) {
+  selectedLbTrack = track;
+  TRACKS.forEach((t) => {
+    document.getElementById('lb-' + t).classList.toggle('active', t === track);
+  });
+  if (gameState) renderLeaderboard();
+}
+
+function setHistTrack(track) {
+  selectedHistTrack = track;
+  TRACKS.forEach((t) => {
+    document.getElementById('hs-' + t).classList.toggle('active', t === track);
+  });
+  if (gameState) renderHistory();
 }
 
 // ---- Error display ----
@@ -701,16 +744,21 @@ function formatCountdown(ms) {
   return s + 's';
 }
 
+function getActiveRound() {
+  if (!gameState || !gameState.tracks) return null;
+  const td = gameState.tracks[selectedTrack];
+  return td ? td.currentRound : null;
+}
+
 function tickCountdown() {
-  if (!gameState || !gameState.currentRound || gameState.currentRound.endedAt) {
+  const round = getActiveRound();
+  if (!round || round.endedAt) {
     prevCountdownRemaining = Infinity;
     return;
   }
-  const round = gameState.currentRound;
   const rem = round.endsAt - Date.now();
   const el = document.getElementById('countdown');
 
-  // Detect timed round expiry — trigger re-render to show Time's Up banner
   if (prevCountdownRemaining > 0 && rem <= 0 && round.mode === 'timed') {
     render();
   }
@@ -724,7 +772,6 @@ function tickCountdown() {
   }
 
   if (round.mode === 'timed') {
-    // Show only seconds when under 10s
     el.textContent = rem < 10000 ? Math.ceil(rem / 1000) + 's' : formatCountdown(rem);
     const isUrgent = rem < 10000;
     el.classList.toggle('urgent', isUrgent);
@@ -760,14 +807,15 @@ async function placeGuess() {
   const guess = parseInt(document.getElementById('guess-slider').value, 10);
   if (guess < 1 || guess > 100) { showError('Guess must be between 1 and 100.'); return; }
 
-  if (!gameState || !gameState.currentRound) { showError('No active round.'); return; }
-  if (gameState.currentRound.endedAt) { showError('This round has ended.'); return; }
+  const round = getActiveRound();
+  if (!round) { showError('No active round.'); return; }
+  if (round.endedAt) { showError('This round has ended.'); return; }
 
-  const maxGuesses = gameState.currentRound.maxGuessesPerPlayer || 1;
-  const myGuesses = getMyGuesses(gameState.currentRound);
+  const maxGuesses = round.maxGuessesPerPlayer || 1;
+  const myGuesses = getMyGuesses(round);
   if (myGuesses.length >= maxGuesses) { showError('You have used all your guesses this round.'); return; }
 
-  const memo = { app: 'numguess', type: 'guess', round: gameState.currentRound.id, guess };
+  const memo = { app: 'numguess', type: 'guess', round: round.id, guess };
   const memoStr = JSON.stringify(memo);
   if (memoStr.length >= 1024) { showError('Memo too long — this should not happen.'); return; }
 
@@ -846,19 +894,14 @@ async function saveUsername() {
 }
 
 // ---- Mode picker ----
-const DURATION_SEG_IDS = { 'timed': 'seg-dur-60s', '1h': 'seg-dur-1h', '6h': 'seg-dur-6h', '1d': 'seg-dur-1d', '1w': 'seg-dur-1w' };
-
 function openModePicker() {
   const modal = document.getElementById('mode-picker-modal');
   modal.classList.add('open');
-  const config = (gameState && gameState.pendingRoundConfig) || { duration: '1d', hardMode: false };
-  pickerDuration = config.duration || '1d';
-  pickerSegment = config.hardMode ? 'hard' : 'normal';
-  Object.entries(DURATION_SEG_IDS).forEach(([d, id]) => {
-    document.getElementById(id).classList.toggle('active', d === pickerDuration);
-  });
-  document.getElementById('seg-normal').classList.toggle('active', !config.hardMode);
-  document.getElementById('seg-hard').classList.toggle('active', !!config.hardMode);
+  document.getElementById('mode-picker-title').textContent = '⚙ ' + selectedTrack.toUpperCase() + ' Round Settings';
+  const isHard = gameState && gameState.pendingHardMode && !!gameState.pendingHardMode[selectedTrack];
+  pickerSegment = isHard ? 'hard' : 'normal';
+  document.getElementById('seg-normal').classList.toggle('active', !isHard);
+  document.getElementById('seg-hard').classList.toggle('active', isHard);
 }
 
 function closeModePicker() {
@@ -868,13 +911,6 @@ function closeModePicker() {
 document.getElementById('mode-picker-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeModePicker();
 });
-
-function setDuration(dur) {
-  pickerDuration = dur;
-  Object.entries(DURATION_SEG_IDS).forEach(([d, id]) => {
-    document.getElementById(id).classList.toggle('active', d === dur);
-  });
-}
 
 function setSegment(mode) {
   pickerSegment = mode;
@@ -894,7 +930,7 @@ async function saveMode() {
         'content-type': 'application/json',
         'x-usernode-token': window._ngToken || '',
       },
-      body: JSON.stringify({ duration: pickerDuration, hardMode }),
+      body: JSON.stringify({ track: selectedTrack, hardMode }),
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     closeModePicker();
@@ -926,11 +962,20 @@ async function refreshState() {
     const prev = gameState;
     gameState = data;
 
-    // Detect round end
-    if (prev && prev.currentRound && !prev.currentRound.endedAt &&
-        data.currentRound && data.currentRound.endedAt) {
-      prevEndedAt = data.currentRound.endedAt;
-      fastPollEnd = Date.now() + FAST_POLL_DURATION;
+    // Detect per-track round end → trigger fast poll
+    if (prev && prev.tracks) {
+      for (const track of TRACKS) {
+        const prevTD = prev.tracks[track];
+        const newTD = data.tracks && data.tracks[track];
+        if (prevTD && newTD) {
+          const prevRound = prevTD.currentRound;
+          const newRound = newTD.currentRound;
+          if (prevRound && !prevRound.endedAt && newRound && newRound.endedAt) {
+            prevEndedAt[track] = newRound.endedAt;
+            fastPollEnd = Date.now() + FAST_POLL_DURATION;
+          }
+        }
+      }
     }
 
     render();
@@ -942,8 +987,9 @@ async function refreshState() {
 }
 
 function render() {
-  if (!gameState) return;
-  const round = gameState.currentRound;
+  if (!gameState || !gameState.tracks) return;
+  const td = gameState.tracks[selectedTrack] || {};
+  const round = td.currentRound || null;
 
   // Round bar
   if (round) {
@@ -952,7 +998,6 @@ function render() {
       round.participants + ' player' + (round.participants !== 1 ? 's' : '') +
       ' · ' + round.pot + ' token' + (round.pot !== 1 ? 's' : '');
 
-    // Duration badge (always shown for active rounds)
     const durationBadge = document.getElementById('duration-badge');
     const durMs = round.activeDurationMs;
     let durLabel, durCls;
@@ -965,7 +1010,6 @@ function render() {
     durationBadge.textContent = durLabel;
     durationBadge.style.display = '';
 
-    // Mode badge (hard/normal for multi-guess rounds)
     const modeBadge = document.getElementById('mode-badge');
     const maxG = round.maxGuessesPerPlayer;
     if (maxG && maxG > 1) {
@@ -986,17 +1030,18 @@ function render() {
   // Settings button (visible when logged in)
   document.getElementById('settings-btn').style.display = myAddress ? '' : 'none';
 
-  // Streak widget
+  // Streak widget (per selected track)
   const streakBar = document.getElementById('streak-bar');
-  if (myAddress && gameState.myStreak != null) {
-    const newVal = gameState.myStreak.currentStreak;
-    const bestVal = gameState.myStreak.bestStreak;
+  const myStreaks = gameState.myStreaks;
+  if (myAddress && myStreaks && myStreaks[selectedTrack]) {
+    const trackStreak = myStreaks[selectedTrack];
+    const newVal = trackStreak.currentStreak;
+    const bestVal = trackStreak.bestStreak;
     const currEl = document.getElementById('streak-current');
     const bestEl = document.getElementById('streak-best');
     currEl.textContent = newVal;
     bestEl.textContent = bestVal;
     streakBar.style.display = '';
-    // Animate on win (streak increase)
     if (prevStreakValue >= 0 && newVal > prevStreakValue) {
       currEl.classList.remove('streak-pop');
       void currEl.offsetWidth;
@@ -1044,13 +1089,11 @@ function renderGamePanel(round) {
     lockedBadge.style.display = 'none';
     resultCard.style.display = 'none';
   } else if (singleGuessLocked) {
-    // Legacy single-guess: show locked badge
     guessCard.style.display = 'none';
     lockedBadge.style.display = '';
     resultCard.style.display = 'none';
     document.getElementById('locked-number').textContent = 'Your guess: ' + myGuesses[0].guess;
   } else {
-    // Multi-guess or pre-guess state
     guessCard.style.display = '';
     lockedBadge.style.display = 'none';
     resultCard.style.display = 'none';
@@ -1105,7 +1148,6 @@ function renderResult(round, myGuesses) {
   const isTimed = round.mode === 'timed';
   const noWinner = !round.winner;
 
-  // Heading for timed-mode no-winner case
   const headingEl = document.getElementById('result-heading');
   if (isTimed && noWinner) {
     headingEl.textContent = '⏰ TIME\'S UP';
@@ -1120,7 +1162,6 @@ function renderResult(round, myGuesses) {
   document.getElementById('result-winner').textContent =
     round.winner ? ('🏆 ' + escapeHtml(winnerName) + ' guessed ' + round.winnerGuess) : 'No winner this round';
 
-  // Show best guess from player
   const bestGuess = getMyBestGuess(round, myGuesses);
   if (bestGuess && secret != null) {
     const dist = Math.abs(bestGuess.guess - secret);
@@ -1136,7 +1177,8 @@ function renderResult(round, myGuesses) {
     document.getElementById('result-mine').textContent = myGuesses.length > 0 ? '' : "You didn't guess this round";
   }
 
-  const hasNext = gameState.currentRound && !gameState.currentRound.endedAt;
+  const td = gameState.tracks && gameState.tracks[selectedTrack];
+  const hasNext = td && td.currentRound && !td.currentRound.endedAt;
   document.getElementById('next-round-label').textContent =
     hasNext ? '' : 'Next round starting soon…';
 }
@@ -1152,7 +1194,9 @@ function getName(addr) {
 }
 
 function renderLeaderboard() {
-  const stats = gameState.playerStats || {};
+  if (!gameState || !gameState.tracks) return;
+  const td = gameState.tracks[selectedLbTrack] || {};
+  const stats = td.playerStats || {};
   const entries = Object.entries(stats)
     .map(([pubkey, s]) => ({ pubkey, ...s }))
     .filter((e) => e.won > 0 || e.tokensWon > 0)
@@ -1180,7 +1224,9 @@ function renderLeaderboard() {
 }
 
 function renderHistory() {
-  const past = (gameState.pastRounds || []);
+  if (!gameState || !gameState.tracks) return;
+  const td = gameState.tracks[selectedHistTrack] || {};
+  const past = td.pastRounds || [];
   const container = document.getElementById('history-list');
   if (!past.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">📜</div><p>No history yet</p></div>';
@@ -1240,14 +1286,11 @@ function scheduleNextPoll() {
 async function init() {
   UsernodeLoading.init({ appName: 'Number Guessing Game', streamKey: 'numguess' });
 
-  // Extract JWT token from URL
   const params = new URLSearchParams(window.location.search);
   const token = params.get('token') || '';
-  // Store for fetch headers (streak endpoint needs it)
   window._ngToken = token;
 
   try {
-    // Check mock
     const mockEnabled = (window.usernode && typeof window.usernode.isMockEnabled === 'function')
       ? await Promise.resolve(window.usernode.isMockEnabled()).catch(() => false)
       : false;
@@ -1260,7 +1303,6 @@ async function init() {
       }
     }
 
-    // Get wallet address
     try {
       myAddress = await window.getNodeAddress();
       myPubkey = myAddress;
@@ -1268,10 +1310,8 @@ async function init() {
       console.warn('getNodeAddress failed:', e.message);
     }
 
-    // Fetch initial state to get appPubkey
     await refreshState();
 
-    // Init usernames
     if (window.UsernodeUsernames) {
       try {
         await UsernodeUsernames.init();
@@ -1297,7 +1337,6 @@ async function init() {
     console.error('init error:', e);
   }
 
-  // Start polling and countdown
   scheduleNextPoll();
   countdownTimer = setInterval(tickCountdown, 1000);
 }

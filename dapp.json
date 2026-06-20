@@ -53,6 +53,21 @@
       "name": "Duration badge renders on active round",
       "path": "/__numguess/state",
       "expectText": "activeDurationMs"
+    },
+    {
+      "name": "Track selector renders",
+      "path": "/",
+      "expectSelector": ".track-selector"
+    },
+    {
+      "name": "State endpoint returns per-track data",
+      "path": "/__numguess/state",
+      "expectText": "\"1h\""
+    },
+    {
+      "name": "State endpoint includes all four tracks",
+      "path": "/__numguess/state",
+      "expectText": "\"1w\""
     }
   ]
 }
