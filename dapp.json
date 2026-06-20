@@ -16,13 +16,19 @@
     },
     {
       "key": "TIMER_DURATION_MS",
-      "description": "Round duration in milliseconds before the timer expires.",
+      "description": "Normal round duration in milliseconds before the timer expires.",
       "required": false,
       "default": "86400000"
     },
     {
+      "key": "ROUND_TIMED_MS",
+      "description": "Timed Mode round duration in milliseconds (used when timedMode is active).",
+      "required": false,
+      "default": "60000"
+    },
+    {
       "key": "MIN_PLAYERS",
-      "description": "Minimum number of guesses required before a round can end. If not met, the round extends.",
+      "description": "Minimum number of guesses required before a normal round can end. If not met, the round extends.",
       "required": false,
       "default": "2"
     }
@@ -37,6 +43,11 @@
       "name": "Leaderboard tab renders",
       "path": "/",
       "expectSelector": ".bottom-nav"
+    },
+    {
+      "name": "Game state endpoint returns data",
+      "path": "/__numguess/state",
+      "expectText": "appPubkey"
     }
   ]
 }
