@@ -18,6 +18,14 @@ function createGame(opts) {
   // Set of processed tx IDs (dedup)
   const seenTxIds = new Set();
 
+  function inferTrack(activeDurationMs, mode) {
+    if (mode === 'timed') return 'timed';
+    if (!activeDurationMs || activeDurationMs <= 3600000) return '1h';
+    if (activeDurationMs <= 21600000) return '6h';
+    if (activeDurationMs <= 86400000) return '1d';
+    return '1w';
+  }
+
   function normalizeTx(rawTx) {
     const id = rawTx.id || rawTx.txid || rawTx.txId || rawTx.tx_id || rawTx.hash;
     const from = rawTx.from_pubkey || rawTx.from || rawTx.source || '';
@@ -70,15 +78,19 @@ function createGame(opts) {
       return;
     }
     if (existing) return; // already ended, ignore duplicate
+    const activeDurationMs = memo.active_duration_ms || timerDurationMs;
+    const mode = memo.mode || 'normal';
+    const durationTrack = memo.duration_track || inferTrack(activeDurationMs, mode);
     rounds.set(id, {
       id,
       seedHash: memo.seed_hash,
-      activeDurationMs: memo.active_duration_ms || timerDurationMs,
+      activeDurationMs,
       minPlayers: memo.min_players != null ? memo.min_players : minPlayers,
       maxGuessesPerPlayer: memo.max_guesses_per_player != null ? memo.max_guesses_per_player : 1,
-      mode: memo.mode || 'normal',
+      mode,
+      durationTrack,
       startedAt: tx.ts,
-      endsAt: tx.ts + (memo.active_duration_ms || timerDurationMs),
+      endsAt: tx.ts + activeDurationMs,
       guesses: [],
       endedAt: null,
       secret: null,
@@ -146,6 +158,59 @@ function createGame(opts) {
     return { winner: candidates[0], secret, candidates };
   }
 
+  // ---------------------------------------------------------------------------
+  // Per-track helpers
+  // ---------------------------------------------------------------------------
+
+  function getCurrentRoundForTrack(track) {
+    let latest = null;
+    for (const [, r] of rounds) {
+      if (!r.endedAt && r.durationTrack === track) {
+        if (!latest || r.startedAt > latest.startedAt) latest = r;
+      }
+    }
+    return latest;
+  }
+
+  function getPastRoundsForTrack(track) {
+    const past = [];
+    for (const [, r] of rounds) {
+      if (r.endedAt && r.durationTrack === track) past.push(r);
+    }
+    past.sort((a, b) => b.startedAt - a.startedAt);
+    return past;
+  }
+
+  function getPlayerStatsForTrack(track) {
+    const stats = {};
+    for (const [, r] of rounds) {
+      if (!r.endedAt || !r.winner) continue;
+      if (r.durationTrack !== track) continue;
+      const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash) : null);
+      const w = r.winner;
+      if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity };
+      stats[w].won++;
+      stats[w].tokensWon += r.pot || 0;
+      if (secret != null && r.winnerGuess != null) {
+        stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+      }
+      for (const g of r.guesses) {
+        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity };
+        if (secret != null) {
+          stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
+        }
+      }
+    }
+    for (const k of Object.keys(stats)) {
+      if (stats[k].bestDist === Infinity) stats[k].bestDist = null;
+    }
+    return stats;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Legacy helpers (kept for backward compat)
+  // ---------------------------------------------------------------------------
+
   function getCurrentRound() {
     let latest = null;
     for (const [, r] of rounds) {
@@ -170,7 +235,6 @@ function createGame(opts) {
     for (const [, r] of rounds) {
       if (!r.endedAt || !r.winner) continue;
       const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash) : null);
-      // winner stats
       const w = r.winner;
       if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity };
       stats[w].won++;
@@ -178,7 +242,6 @@ function createGame(opts) {
       if (secret != null && r.winnerGuess != null) {
         stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
       }
-      // all guessers (use their best guess for bestDist)
       for (const g of r.guesses) {
         if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity };
         if (secret != null) {
@@ -186,55 +249,69 @@ function createGame(opts) {
         }
       }
     }
-    // normalize bestDist
     for (const k of Object.keys(stats)) {
       if (stats[k].bestDist === Infinity) stats[k].bestDist = null;
     }
     return stats;
   }
 
-  function getStateResponse() {
-    const currentRound = getCurrentRound();
-    const pastRounds = getPastRounds();
-    const playerStats = getPlayerStats();
+  // ---------------------------------------------------------------------------
+  // State response builders
+  // ---------------------------------------------------------------------------
 
-    let currentRoundData = null;
-    if (currentRound) {
-      currentRoundData = {
-        id: currentRound.id,
-        startedAt: currentRound.startedAt,
-        endsAt: currentRound.endsAt,
-        activeDurationMs: currentRound.activeDurationMs,
-        minPlayers: currentRound.minPlayers,
-        maxGuessesPerPlayer: currentRound.maxGuessesPerPlayer,
-        mode: currentRound.mode,
-        participants: currentRound.guesses.length,
-        pot: currentRound.guesses.reduce((s, g) => s + g.amount, 0),
-        guesses: currentRound.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
-        endedAt: null,
+  function buildCurrentRoundData(round) {
+    return {
+      id: round.id,
+      startedAt: round.startedAt,
+      endsAt: round.endsAt,
+      activeDurationMs: round.activeDurationMs,
+      minPlayers: round.minPlayers,
+      maxGuessesPerPlayer: round.maxGuessesPerPlayer,
+      mode: round.mode,
+      durationTrack: round.durationTrack,
+      participants: round.guesses.length,
+      pot: round.guesses.reduce((s, g) => s + g.amount, 0),
+      guesses: round.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
+      endedAt: null,
+    };
+  }
+
+  function buildPastRoundData(r) {
+    return {
+      id: r.id,
+      startedAt: r.startedAt,
+      endsAt: r.endsAt,
+      activeDurationMs: r.activeDurationMs,
+      endedAt: r.endedAt,
+      secret: r.secret,
+      winner: r.winner,
+      winnerGuess: r.winnerGuess,
+      pot: r.pot,
+      participants: r.participants,
+      mode: r.mode,
+      durationTrack: r.durationTrack,
+      maxGuessesPerPlayer: r.maxGuessesPerPlayer,
+      guesses: r.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
+    };
+  }
+
+  function getStateResponse() {
+    const TRACK_KEYS = ['1h', '6h', '1d', '1w'];
+    const tracks = {};
+    for (const track of TRACK_KEYS) {
+      const currentRound = getCurrentRoundForTrack(track);
+      const pastRounds = getPastRoundsForTrack(track);
+      const playerStats = getPlayerStatsForTrack(track);
+      tracks[track] = {
+        currentRound: currentRound ? buildCurrentRoundData(currentRound) : null,
+        pastRounds: pastRounds.map(buildPastRoundData),
+        playerStats,
       };
     }
-
     return {
       appPubkey,
       loading: false,
-      currentRound: currentRoundData,
-      pastRounds: pastRounds.map((r) => ({
-        id: r.id,
-        startedAt: r.startedAt,
-        endsAt: r.endsAt,
-        activeDurationMs: r.activeDurationMs,
-        endedAt: r.endedAt,
-        secret: r.secret,
-        winner: r.winner,
-        winnerGuess: r.winnerGuess,
-        pot: r.pot,
-        participants: r.participants,
-        mode: r.mode,
-        maxGuessesPerPlayer: r.maxGuessesPerPlayer,
-        guesses: r.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
-      })),
-      playerStats,
+      tracks,
     };
   }
 
@@ -252,7 +329,10 @@ function createGame(opts) {
     findWinner,
     computeSecret,
     getCurrentRound,
+    getCurrentRoundForTrack,
     getPastRounds,
+    getPastRoundsForTrack,
+    getPlayerStatsForTrack,
     getStateResponse,
     handleRequest,
     rounds,
