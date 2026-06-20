@@ -29,9 +29,13 @@ const APP_PUBKEY = 'utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20y
 const APP_SECRET_KEY = process.env.APP_SECRET_KEY || '';
 const NODE_RPC_URL = process.env.NODE_RPC_URL || 'http://usernode-node:3000';
 const TIMER_DURATION_MS = parseInt(process.env.TIMER_DURATION_MS || '86400000', 10);
+const ROUND_TIMED_MS = parseInt(process.env.ROUND_TIMED_MS || '60000', 10);
 const MIN_PLAYERS = parseInt(process.env.MIN_PLAYERS || '2', 10);
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 const LOCAL_DEV = process.argv.includes('--local-dev');
+
+// Pending config for the next round to start
+let pendingRoundConfig = { timedMode: false, hardMode: false };
 
 // ---------------------------------------------------------------------------
 // Auth middleware
@@ -118,30 +122,33 @@ function injectStagingSeeds() {
   const p3 = 'utpk1stagingplayer000000000000000000000000000000000000000003';
 
   const fakeTxs = [
-    // Round 1 — secret 42 — alice_s wins with bullseye
-    { id: 'staging-r1-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 1, seed_hash: seedHashes[0], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS }), timestamp_ms: now - 2 * day - 1000 },
+    // Round 1 — secret 42 — alice_s wins with bullseye (single-guess, backward compat)
+    { id: 'staging-r1-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 1, seed_hash: seedHashes[0], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 1, mode: 'normal' }), timestamp_ms: now - 2 * day - 1000 },
     { id: 'staging-r1-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 1, guess: 42 }), timestamp_ms: now - 2 * day + 100 },
     { id: 'staging-r1-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 1, guess: 45 }), timestamp_ms: now - 2 * day + 200 },
     { id: 'staging-r1-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 1, guess: 38 }), timestamp_ms: now - 2 * day + 300 },
     { id: 'staging-r1-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 1, secret: 42, winner: p1, winner_guess: 42, pot: 3, participants: 3 }), timestamp_ms: now - 2 * day + TIMER_DURATION_MS },
 
-    // Round 2 — secret 75 — bob_s wins with guess 74
-    { id: 'staging-r2-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 2, seed_hash: seedHashes[1], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS }), timestamp_ms: now - day - 1000 },
+    // Round 2 — secret 75 — bob_s wins with guess 74 (single-guess, backward compat)
+    { id: 'staging-r2-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 2, seed_hash: seedHashes[1], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 1, mode: 'normal' }), timestamp_ms: now - day - 1000 },
     { id: 'staging-r2-g1', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 2, guess: 74 }), timestamp_ms: now - day + 100 },
     { id: 'staging-r2-g2', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 2, guess: 80 }), timestamp_ms: now - day + 200 },
     { id: 'staging-r2-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 2, guess: 70 }), timestamp_ms: now - day + 300 },
     { id: 'staging-r2-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 2, secret: 75, winner: p2, winner_guess: 74, pot: 4, participants: 4 }), timestamp_ms: now - day + TIMER_DURATION_MS },
 
-    // Round 3 — secret 23 — carol_s wins with guess 25
-    { id: 'staging-r3-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 3, seed_hash: seedHashes[2], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS }), timestamp_ms: now - 12 * 3600000 - 1000 },
+    // Round 3 — secret 23 — carol_s wins with guess 25 (single-guess, backward compat)
+    { id: 'staging-r3-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 3, seed_hash: seedHashes[2], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 1, mode: 'normal' }), timestamp_ms: now - 12 * 3600000 - 1000 },
     { id: 'staging-r3-g1', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 3, guess: 25 }), timestamp_ms: now - 12 * 3600000 + 100 },
     { id: 'staging-r3-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 3, guess: 20 }), timestamp_ms: now - 12 * 3600000 + 200 },
     { id: 'staging-r3-g3', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 3, guess: 26 }), timestamp_ms: now - 12 * 3600000 + 300 },
     { id: 'staging-r3-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 3, secret: 23, winner: p3, winner_guess: 25, pot: 3, participants: 3 }), timestamp_ms: now - 12 * 3600000 + TIMER_DURATION_MS },
 
-    // Round 4 — current open round, alice_s has guessed 55
-    { id: 'staging-r4-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 4, seed_hash: seedHashes[3], active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS }), timestamp_ms: now - 2 * 3600000 },
+    // Round 4 — TIMED + HARD MODE — open, expired, shows Time's Up UI in staging
+    // Secret = parseInt('0000007f', 16) % 100 + 1 = 127 % 100 + 1 = 28
+    // alice_s has two guesses (55 and 60); best is 55 (|55-28|=27 vs |60-28|=32)
+    { id: 'staging-r4-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 4, seed_hash: seedHashes[3], active_duration_ms: 60000, min_players: 0, mode: 'timed', max_guesses_per_player: 5 }), timestamp_ms: now - 2 * 3600000 },
     { id: 'staging-r4-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 4, guess: 55 }), timestamp_ms: now - 2 * 3600000 + 1000 },
+    { id: 'staging-r4-g2', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 4, guess: 60 }), timestamp_ms: now - 2 * 3600000 + 5000 },
 
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
@@ -153,6 +160,67 @@ function injectStagingSeeds() {
     game.processTransaction(tx);
   }
   console.log('[staging] Injected', fakeTxs.length, 'seed transactions');
+}
+
+async function seedStagingDb() {
+  if (!pool) return;
+  try {
+    await pool.query(`
+      INSERT INTO player_streaks (pubkey, current_streak, best_streak, updated_at)
+      VALUES
+        ('utpk1stagingplayer000000000000000000000000000000000000000001', 3, 5, 0),
+        ('utpk1stagingplayer000000000000000000000000000000000000000002', 1, 2, 0),
+        ('utpk1stagingplayer000000000000000000000000000000000000000003', 0, 1, 0)
+      ON CONFLICT (pubkey) DO NOTHING
+    `);
+    console.log('[staging] Seeded player_streaks');
+  } catch (e) {
+    console.error('[staging] seedStagingDb error:', e.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Streak helpers
+// ---------------------------------------------------------------------------
+
+async function updateStreaks(winnerPubkey, participantPubkeys) {
+  if (!pool) return;
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (winnerPubkey) {
+        await client.query(
+          `INSERT INTO player_streaks (pubkey, current_streak, best_streak, updated_at)
+           VALUES ($1, 1, 1, $2)
+           ON CONFLICT (pubkey) DO UPDATE SET
+             current_streak = player_streaks.current_streak + 1,
+             best_streak = GREATEST(player_streaks.best_streak, player_streaks.current_streak + 1),
+             updated_at = $2`,
+          [winnerPubkey, Date.now()]
+        );
+      }
+      const losers = participantPubkeys.filter((p) => p !== winnerPubkey);
+      for (const loser of losers) {
+        await client.query(
+          `INSERT INTO player_streaks (pubkey, current_streak, best_streak, updated_at)
+           VALUES ($1, 0, 0, $2)
+           ON CONFLICT (pubkey) DO UPDATE SET
+             current_streak = 0,
+             updated_at = $2`,
+          [loser, Date.now()]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (e) {
+    console.error('[streaks] update failed:', e.message);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +300,11 @@ async function concludeRound(round) {
     // 2. Post end_round self-transfer
     await postEndRound(round, secret, winner, result.winner.guess, pot, round.guesses.length);
 
-    // 3. Start next round
+    // 3. Update streaks
+    const allParticipants = [...new Set(round.guesses.map((g) => g.from))];
+    await updateStreaks(winner, allParticipants);
+
+    // 4. Start next round
     await postStartRound();
     inFlightPayout = false;
   } catch (e) {
@@ -278,14 +350,25 @@ async function postStartRound() {
   const roundId = maxId + 1;
   nextRoundId = roundId;
 
+  // Consume pending config then reset
+  const config = { ...pendingRoundConfig };
+  pendingRoundConfig = { timedMode: false, hardMode: false };
+
+  const activeDurationMs = config.timedMode ? ROUND_TIMED_MS : TIMER_DURATION_MS;
+  const maxGuessesPerPlayer = config.hardMode ? 5 : 10;
+  const roundMode = config.timedMode ? 'timed' : 'normal';
+  const roundMinPlayers = config.timedMode ? 0 : MIN_PLAYERS;
+
   const seedHash = crypto.randomBytes(32).toString('hex');
   const memo = {
     app: 'numguess',
     type: 'start_round',
     round: roundId,
     seed_hash: seedHash,
-    active_duration_ms: TIMER_DURATION_MS,
-    min_players: MIN_PLAYERS,
+    active_duration_ms: activeDurationMs,
+    min_players: roundMinPlayers,
+    max_guesses_per_player: maxGuessesPerPlayer,
+    mode: roundMode,
   };
 
   await sendWithRetry(APP_PUBKEY, 0, memo, 3);
@@ -298,7 +381,7 @@ async function postStartRound() {
     memo: JSON.stringify(memo),
     timestamp_ms: Date.now(),
   });
-  console.log(`[round] Started round ${roundId}`);
+  console.log(`[round] Started round ${roundId} (mode=${roundMode}, maxGuesses=${maxGuessesPerPlayer})`);
 }
 
 async function extendRound(round) {
@@ -395,14 +478,42 @@ app.use((req, res, next) => {
   next();
 });
 
-// Game state endpoint
-app.get('/__numguess/state', (_req, res) => {
+// Game state endpoint — async to support streak lookup
+app.get('/__numguess/state', async (req, res) => {
   if (!numguessCache.isStreamReady()) {
     res.json({ loading: true, appPubkey: APP_PUBKEY });
     return;
   }
   res.set('cache-control', 'no-store');
-  res.json(game.getStateResponse());
+  const state = game.getStateResponse();
+  state.pendingRoundConfig = { ...pendingRoundConfig };
+
+  if (pool && req.user && req.user.usernode_pubkey) {
+    try {
+      const r = await pool.query(
+        'SELECT current_streak, best_streak FROM player_streaks WHERE pubkey = $1',
+        [req.user.usernode_pubkey]
+      );
+      state.myStreak = r.rows.length > 0
+        ? { currentStreak: r.rows[0].current_streak, bestStreak: r.rows[0].best_streak }
+        : { currentStreak: 0, bestStreak: 0 };
+    } catch (e) {
+      console.error('[streaks] state query:', e.message);
+    }
+  }
+
+  res.json(state);
+});
+
+// Admin: set mode for next round
+app.post('/__numguess/admin/set-mode', (req, res) => {
+  const { timedMode, hardMode } = req.body || {};
+  pendingRoundConfig = {
+    timedMode: !!timedMode,
+    hardMode: !!hardMode,
+  };
+  console.log('[admin] pendingRoundConfig updated:', pendingRoundConfig);
+  res.json({ ok: true, pendingRoundConfig });
 });
 
 // Admin: manually start a new round
@@ -442,8 +553,26 @@ app.get('*', (req, res) => {
 // ---------------------------------------------------------------------------
 
 async function start() {
+  // DB migrations
+  if (pool) {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS player_streaks (
+          pubkey         TEXT    PRIMARY KEY,
+          current_streak INTEGER NOT NULL DEFAULT 0,
+          best_streak    INTEGER NOT NULL DEFAULT 0,
+          updated_at     BIGINT  NOT NULL DEFAULT 0
+        )
+      `);
+      console.log('[db] player_streaks table ready');
+    } catch (e) {
+      console.error('[db] migration error:', e.message);
+    }
+  }
+
   if (IS_STAGING) {
     injectStagingSeeds();
+    await seedStagingDb();
   }
 
   await numguessCache.start();

@@ -142,22 +142,63 @@
       -webkit-backdrop-filter: blur(12px);
       box-shadow: var(--shadow);
     }
+    /* ---- Streak bar ---- */
+    .streak-bar {
+      display: flex; align-items: center; justify-content: space-around;
+      padding: .65rem 1rem; margin-bottom: .75rem; gap: 1rem;
+    }
+    .streak-bar span { font-size: .85rem; color: var(--text-muted); }
+    .streak-bar strong { font-size: 1.5rem; font-weight: 900; color: var(--text); margin-left: .35rem; }
+    @keyframes streak-pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.5); } }
+    .streak-pop { animation: streak-pop .4s ease; }
     /* ---- Round info bar ---- */
     .round-bar {
       display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
-      gap: .5rem; padding: .75rem 1rem; margin-bottom: 1rem;
+      gap: .4rem; padding: .75rem 1rem; margin-bottom: 1rem;
     }
     .round-badge {
       background: var(--accent); color: white;
       font-size: .72rem; font-weight: 700; letter-spacing: .05em;
       padding: .2rem .65rem; border-radius: 2rem;
     }
-    .countdown { font-size: .85rem; font-weight: 600; color: var(--accent-light); font-variant-numeric: tabular-nums; }
+    .mode-badge {
+      font-size: .65rem; font-weight: 700; letter-spacing: .05em;
+      padding: .15rem .5rem; border-radius: 2rem;
+      background: var(--bg-card); border: 1px solid var(--border); color: var(--text-muted);
+    }
+    .mode-badge.timed { border-color: rgba(239,68,68,0.5); color: #f87171; }
+    .mode-badge.hard { border-color: rgba(234,179,8,0.5); color: #ca8a04; }
+    .countdown { font-size: .85rem; font-weight: 600; color: var(--accent-light); font-variant-numeric: tabular-nums; flex: 1; text-align: center; }
     .countdown.urgent { color: #ef4444; }
+    @keyframes countdown-pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    .countdown.pulse { animation: countdown-pulse .6s ease-in-out infinite; }
     .players-info { font-size: .78rem; color: var(--text-muted); }
+    .settings-btn {
+      background: none; border: 1px solid var(--border); border-radius: .5rem;
+      color: var(--text-muted); padding: .2rem .45rem; cursor: pointer; font-size: .9rem; line-height: 1;
+      flex-shrink: 0;
+    }
+    .settings-btn:hover { border-color: var(--border-strong); color: var(--text); }
     /* ---- Guess card ---- */
     .guess-card { padding: 1.5rem; margin-bottom: 1rem; }
-    .guess-label { font-size: .78rem; color: var(--text-muted); margin-bottom: 1rem; letter-spacing: .04em; text-transform: uppercase; }
+    .guess-label { font-size: .78rem; color: var(--text-muted); margin-bottom: .75rem; letter-spacing: .04em; text-transform: uppercase; }
+    .guess-counter {
+      font-size: .8rem; color: var(--text-muted); margin-bottom: .75rem;
+      padding: .4rem .75rem; background: var(--bg-card); border-radius: .5rem;
+      border: 1px solid var(--border);
+    }
+    /* ---- My guesses list ---- */
+    .my-guesses { margin-bottom: 1rem; }
+    .my-guesses-label { font-size: .7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .4rem; }
+    .my-guess-row {
+      display: flex; align-items: center; gap: .5rem;
+      padding: .35rem .6rem; border-radius: .4rem; margin-bottom: .25rem;
+      background: rgba(124,58,237,0.08); border: 1px solid rgba(124,58,237,0.2);
+      font-size: .82rem;
+    }
+    .my-guess-val { font-weight: 700; font-size: .95rem; color: var(--accent-light); }
+    .my-guess-tag { font-size: .7rem; color: var(--text-muted); margin-left: auto; }
+    /* ---- Slider ---- */
     .slider-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
     .guess-slider {
       flex: 1; -webkit-appearance: none; appearance: none;
@@ -219,8 +260,19 @@
     }
     .waiting-notice .wn-icon { font-size: 1.5rem; margin-bottom: .5rem; }
     .waiting-notice p { font-size: .85rem; color: #ca8a04; }
+    /* ---- Time's Up banner ---- */
+    .timesup-banner {
+      text-align: center; padding: 1.5rem 1rem; margin-bottom: 1rem;
+      background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.35);
+      border-radius: .75rem;
+      animation: badge-in .3s ease;
+    }
+    .timesup-banner .tu-icon { font-size: 2rem; margin-bottom: .4rem; }
+    .timesup-banner .tu-title { font-size: 1.15rem; font-weight: 800; color: #f87171; margin-bottom: .25rem; }
+    .timesup-banner .tu-sub { font-size: .82rem; color: var(--text-muted); }
     /* ---- Result panel ---- */
     .result-card { padding: 1.5rem; margin-bottom: 1rem; text-align: center; }
+    .result-heading { font-size: .78rem; color: #f87171; font-weight: 700; letter-spacing: .05em; margin-bottom: .5rem; text-transform: uppercase; }
     .result-secret { font-size: 3rem; font-weight: 900; color: var(--accent-light); line-height: 1; }
     .result-label { font-size: .75rem; color: var(--text-muted); margin: .25rem 0 1rem; text-transform: uppercase; letter-spacing: .06em; }
     .result-winner { font-size: 1rem; font-weight: 700; margin-bottom: .5rem; }
@@ -330,6 +382,34 @@
     }
     .username-suffix { padding-right: .75rem; color: var(--text-muted); font-size: .85rem; white-space: nowrap; }
     .modal-close { float: right; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; margin-top: -2rem; }
+    /* ---- Mode picker modal extras ---- */
+    .mode-picker-note { font-size: .8rem; color: var(--text-muted); margin-bottom: 1.25rem; line-height: 1.5; }
+    .mode-section-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: .5rem; }
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1.25rem; font-size: .9rem; font-weight: 500;
+    }
+    .toggle-switch { position: relative; display: inline-block; width: 46px; height: 26px; flex-shrink: 0; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: var(--border-strong); border-radius: 26px; transition: background .25s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 20px; height: 20px; left: 3px; top: 3px;
+      background: white; border-radius: 50%; transition: transform .25s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+    .segment { display: flex; gap: .4rem; margin-bottom: 1.25rem; }
+    .seg-btn {
+      flex: 1; padding: .55rem .5rem; font-size: .82rem; font-weight: 500;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: .6rem;
+      cursor: pointer; color: var(--text-muted); transition: background .15s, color .15s, border-color .15s;
+    }
+    .seg-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .seg-btn:hover:not(.active) { background: var(--bg-card-hover); }
     /* ---- Reconnect bar ---- */
     .reconnect-bar {
       display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 500;
@@ -361,11 +441,21 @@
 
   <!-- Game Panel -->
   <div class="panel active" id="panel-game">
+
+    <!-- Streak widget -->
+    <div class="streak-bar card" id="streak-bar" style="display:none">
+      <span>🔥 Streak <strong id="streak-current">0</strong></span>
+      <span>🏆 Best <strong id="streak-best">0</strong></span>
+    </div>
+
     <!-- Round bar -->
     <div class="card round-bar" id="round-bar">
       <span class="round-badge" id="round-badge">Round —</span>
+      <span id="timed-badge" class="mode-badge timed" style="display:none">⏱ Timed</span>
+      <span id="mode-badge" class="mode-badge" style="display:none">Normal</span>
       <span class="countdown" id="countdown">—</span>
       <span class="players-info" id="players-info">— players · — tokens</span>
+      <button class="settings-btn" id="settings-btn" onclick="openModePicker()" title="Set next round mode" style="display:none">⚙</button>
     </div>
 
     <!-- Error display -->
@@ -377,18 +467,36 @@
       <p>Waiting for more players… Round will extend when time runs out.</p>
     </div>
 
+    <!-- Time's Up banner (timed rounds that expired before server closes them) -->
+    <div class="timesup-banner" id="timesup-banner" style="display:none">
+      <div class="tu-icon">⏰</div>
+      <div class="tu-title">Time's Up!</div>
+      <div class="tu-sub">Round is closing… results coming soon.</div>
+    </div>
+
     <!-- Guess card -->
     <div class="card guess-card" id="guess-card">
       <div class="guess-label">Pick a number between 1 and 100</div>
-      <div class="slider-row">
-        <input type="range" min="1" max="100" value="50" class="guess-slider" id="guess-slider">
-        <input type="number" min="1" max="100" value="50" class="guess-number" id="guess-number">
+      <div id="guess-counter" class="guess-counter" style="display:none"></div>
+      <div id="my-guesses-list" class="my-guesses" style="display:none"></div>
+      <div id="guess-input-area">
+        <div class="slider-row">
+          <input type="range" min="1" max="100" value="50" class="guess-slider" id="guess-slider">
+          <input type="number" min="1" max="100" value="50" class="guess-number" id="guess-number">
+        </div>
+        <div class="range-labels"><span>1</span><span>50</span><span>100</span></div>
+        <button class="btn" id="guess-btn" onclick="placeGuess()">Place Guess — 1 token</button>
       </div>
-      <div class="range-labels"><span>1</span><span>50</span><span>100</span></div>
-      <button class="btn" id="guess-btn" onclick="placeGuess()">Place Guess — 1 token</button>
+      <div id="all-guesses-used-msg" class="locked-badge" style="display:none">
+        <span class="locked-icon">🔒</span>
+        <div class="locked-text">
+          <strong>All guesses used</strong>
+          <small>Waiting for round to end… Good luck!</small>
+        </div>
+      </div>
     </div>
 
-    <!-- Locked badge (shown after guessing) -->
+    <!-- Locked badge (single-guess rounds: shown after guessing) -->
     <div class="locked-badge" id="locked-badge" style="display:none">
       <span class="locked-icon">🔒</span>
       <div class="locked-text">
@@ -399,6 +507,7 @@
 
     <!-- Result panel (shown after round ends) -->
     <div class="card result-card" id="result-card" style="display:none">
+      <div id="result-heading" class="result-heading" style="display:none"></div>
       <div id="bullseye-badge" class="bullseye-badge" style="display:none">🎯 Bullseye!</div>
       <div class="result-secret" id="result-secret">—</div>
       <div class="result-label">Secret Number</div>
@@ -461,6 +570,31 @@
   </div>
 </div>
 
+<!-- Mode Picker Modal -->
+<div class="modal-overlay" id="mode-picker-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModePicker()">✕</button>
+    <div class="modal-title">⚙ Set Next Round Mode</div>
+    <div class="mode-picker-note">Settings apply when the next round starts. Any logged-in player can set this.</div>
+
+    <div class="toggle-row">
+      <span>⏱ Timed Mode (60 seconds)</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="mode-timed-toggle">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="mode-section-label">Guess limit per player</div>
+    <div class="segment">
+      <button class="seg-btn active" id="seg-normal" onclick="setSegment('normal')">Normal (10 guesses)</button>
+      <button class="seg-btn" id="seg-hard" onclick="setSegment('hard')">Hard (5 guesses)</button>
+    </div>
+
+    <button class="btn" id="mode-save-btn" onclick="saveMode()">Set for Next Round</button>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -480,6 +614,9 @@ let fastPollEnd = 0;
 let pollTimer = null;
 let countdownTimer = null;
 let prevEndedAt = null;
+let prevStreakValue = -1;
+let prevCountdownRemaining = Infinity;
+let pickerSegment = 'normal';
 
 // ---- Theme ----
 function toggleTheme() {
@@ -522,7 +659,7 @@ function escapeHtml(str) {
 }
 
 // ---- Sending state ----
-function setSending(val, success) {
+function setSending(val) {
   sending = val;
   const btn = document.getElementById('guess-btn');
   if (btn) btn.disabled = val;
@@ -560,12 +697,55 @@ function formatCountdown(ms) {
   if (m > 0) return m + 'm ' + (s % 60) + 's';
   return s + 's';
 }
+
 function tickCountdown() {
-  if (!gameState || !gameState.currentRound || gameState.currentRound.endedAt) return;
-  const rem = gameState.currentRound.endsAt - Date.now();
+  if (!gameState || !gameState.currentRound || gameState.currentRound.endedAt) {
+    prevCountdownRemaining = Infinity;
+    return;
+  }
+  const round = gameState.currentRound;
+  const rem = round.endsAt - Date.now();
   const el = document.getElementById('countdown');
-  el.textContent = rem > 0 ? formatCountdown(rem) : 'Ending…';
-  el.classList.toggle('urgent', rem < 60000 && rem > 0);
+
+  // Detect timed round expiry — trigger re-render to show Time's Up banner
+  if (prevCountdownRemaining > 0 && rem <= 0 && round.mode === 'timed') {
+    render();
+  }
+  prevCountdownRemaining = rem;
+
+  if (rem <= 0) {
+    el.textContent = '0s';
+    el.classList.add('urgent');
+    if (round.mode === 'timed') el.classList.add('pulse');
+    return;
+  }
+
+  if (round.mode === 'timed') {
+    // Show only seconds when under 10s
+    el.textContent = rem < 10000 ? Math.ceil(rem / 1000) + 's' : formatCountdown(rem);
+    const isUrgent = rem < 10000;
+    el.classList.toggle('urgent', isUrgent);
+    el.classList.toggle('pulse', isUrgent);
+  } else {
+    el.textContent = formatCountdown(rem);
+    el.classList.toggle('urgent', rem < 60000);
+    el.classList.remove('pulse');
+  }
+}
+
+// ---- My guesses helpers ----
+function getMyGuesses(round) {
+  if (!round || !myAddress) return [];
+  return round.guesses.filter((g) => g.from === myAddress);
+}
+
+function getMyBestGuess(round, myGuesses) {
+  if (!myGuesses || !myGuesses.length) return null;
+  const secret = round && round.secret != null ? round.secret : null;
+  if (secret == null) return myGuesses[myGuesses.length - 1];
+  return myGuesses.reduce((best, g) => {
+    return !best || Math.abs(g.guess - secret) < Math.abs(best.guess - secret) ? g : best;
+  }, null);
 }
 
 // ---- Guess action ----
@@ -580,9 +760,16 @@ async function placeGuess() {
   if (!gameState || !gameState.currentRound) { showError('No active round.'); return; }
   if (gameState.currentRound.endedAt) { showError('This round has ended.'); return; }
 
+  const maxGuesses = gameState.currentRound.maxGuessesPerPlayer || 1;
+  const myGuesses = getMyGuesses(gameState.currentRound);
+  if (myGuesses.length >= maxGuesses) { showError('You have used all your guesses this round.'); return; }
+
   const memo = { app: 'numguess', type: 'guess', round: gameState.currentRound.id, guess };
   const memoStr = JSON.stringify(memo);
   if (memoStr.length >= 1024) { showError('Memo too long — this should not happen.'); return; }
+
+  const guessesLeft = maxGuesses - myGuesses.length;
+  const isMultiGuess = maxGuesses > 1;
 
   setSending(true);
   clearErrors();
@@ -591,13 +778,15 @@ async function placeGuess() {
       ...TX_SEND_OPTS,
       serverCacheUrl: '/__usernode/cache/' + appPubkey,
       confirmTitle: 'Lock in your guess',
-      confirmSubtitle: 'Guess #' + guess + ' — 1 token entry fee. This cannot be changed.',
+      confirmSubtitle: isMultiGuess
+        ? 'Guess #' + guess + ' — 1 token. You have ' + guessesLeft + ' guess' + (guessesLeft !== 1 ? 'es' : '') + ' remaining (each costs 1 token).'
+        : 'Guess #' + guess + ' — 1 token entry fee. This cannot be changed.',
     });
-    setSending(false, true);
+    setSending(false);
     fastPollEnd = Date.now() + FAST_POLL_DURATION;
     await refreshState();
   } catch (e) {
-    setSending(false, false);
+    setSending(false);
     const msg = e && e.message ? e.message : String(e);
     if (msg.toLowerCase().includes('timeout')) {
       showError('Transaction timed out — it may still confirm. Check back shortly.');
@@ -653,10 +842,62 @@ async function saveUsername() {
   }
 }
 
+// ---- Mode picker ----
+function openModePicker() {
+  const modal = document.getElementById('mode-picker-modal');
+  modal.classList.add('open');
+  const config = (gameState && gameState.pendingRoundConfig) || { timedMode: false, hardMode: false };
+  document.getElementById('mode-timed-toggle').checked = !!config.timedMode;
+  pickerSegment = config.hardMode ? 'hard' : 'normal';
+  document.getElementById('seg-normal').classList.toggle('active', !config.hardMode);
+  document.getElementById('seg-hard').classList.toggle('active', !!config.hardMode);
+}
+
+function closeModePicker() {
+  document.getElementById('mode-picker-modal').classList.remove('open');
+}
+
+document.getElementById('mode-picker-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeModePicker();
+});
+
+function setSegment(mode) {
+  pickerSegment = mode;
+  document.getElementById('seg-normal').classList.toggle('active', mode === 'normal');
+  document.getElementById('seg-hard').classList.toggle('active', mode === 'hard');
+}
+
+async function saveMode() {
+  const timedMode = document.getElementById('mode-timed-toggle').checked;
+  const hardMode = pickerSegment === 'hard';
+  const btn = document.getElementById('mode-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const resp = await fetch('/__numguess/admin/set-mode', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-usernode-token': window._ngToken || '',
+      },
+      body: JSON.stringify({ timedMode, hardMode }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    closeModePicker();
+    await refreshState();
+  } catch (e) {
+    showError('Failed to set mode: ' + (e && e.message ? e.message : String(e)));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Set for Next Round';
+  }
+}
+
 // ---- State fetch & render ----
 async function refreshState() {
   try {
-    const res = await fetch('/__numguess/state', { cache: 'no-store' });
+    const headers = window._ngToken ? { 'x-usernode-token': window._ngToken } : {};
+    const res = await fetch('/__numguess/state', { cache: 'no-store', headers });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
 
@@ -686,11 +927,6 @@ async function refreshState() {
   }
 }
 
-function getMyGuess(round) {
-  if (!round || !myAddress) return null;
-  return round.guesses.find((g) => g.from === myAddress) || null;
-}
-
 function render() {
   if (!gameState) return;
   const round = gameState.currentRound;
@@ -701,9 +937,51 @@ function render() {
     document.getElementById('players-info').textContent =
       round.participants + ' player' + (round.participants !== 1 ? 's' : '') +
       ' · ' + round.pot + ' token' + (round.pot !== 1 ? 's' : '');
+
+    // Timed badge
+    const timedBadge = document.getElementById('timed-badge');
+    timedBadge.style.display = round.mode === 'timed' ? '' : 'none';
+
+    // Mode badge (show for new multi-guess rounds)
+    const modeBadge = document.getElementById('mode-badge');
+    const maxG = round.maxGuessesPerPlayer;
+    if (maxG && maxG > 1) {
+      const isHard = maxG <= 5;
+      modeBadge.style.display = '';
+      modeBadge.className = 'mode-badge' + (isHard ? ' hard' : '');
+      modeBadge.textContent = isHard ? 'Hard' : 'Normal';
+    } else {
+      modeBadge.style.display = 'none';
+    }
   } else {
     document.getElementById('round-badge').textContent = 'No active round';
     document.getElementById('players-info').textContent = '';
+    document.getElementById('timed-badge').style.display = 'none';
+    document.getElementById('mode-badge').style.display = 'none';
+  }
+
+  // Settings button (visible when logged in)
+  document.getElementById('settings-btn').style.display = myAddress ? '' : 'none';
+
+  // Streak widget
+  const streakBar = document.getElementById('streak-bar');
+  if (myAddress && gameState.myStreak != null) {
+    const newVal = gameState.myStreak.currentStreak;
+    const bestVal = gameState.myStreak.bestStreak;
+    const currEl = document.getElementById('streak-current');
+    const bestEl = document.getElementById('streak-best');
+    currEl.textContent = newVal;
+    bestEl.textContent = bestVal;
+    streakBar.style.display = '';
+    // Animate on win (streak increase)
+    if (prevStreakValue >= 0 && newVal > prevStreakValue) {
+      currEl.classList.remove('streak-pop');
+      void currEl.offsetWidth;
+      currEl.classList.add('streak-pop');
+    }
+    prevStreakValue = newVal;
+  } else {
+    streakBar.style.display = 'none';
   }
 
   renderGamePanel(round);
@@ -716,59 +994,125 @@ function renderGamePanel(round) {
   const lockedBadge = document.getElementById('locked-badge');
   const resultCard = document.getElementById('result-card');
   const waitingNotice = document.getElementById('waiting-notice');
+  const timesupBanner = document.getElementById('timesup-banner');
 
-  const myGuess = getMyGuess(round);
+  const myGuesses = getMyGuesses(round);
   const isEnded = round && round.endedAt;
-  const waitingForPlayers = round && !isEnded &&
+  const isTimed = round && round.mode === 'timed';
+  const isTimedOut = isTimed && round && !isEnded && (round.endsAt - Date.now() <= 0);
+  const maxGuesses = round ? (round.maxGuessesPerPlayer || 1) : 1;
+  const allGuessesUsed = round && myGuesses.length >= maxGuesses;
+  const singleGuessLocked = maxGuesses === 1 && myGuesses.length >= 1;
+
+  const waitingForPlayers = round && !isEnded && !isTimed &&
     round.endsAt < Date.now() && round.participants < (round.minPlayers || 2);
 
   waitingNotice.style.display = waitingForPlayers ? '' : 'none';
+  timesupBanner.style.display = isTimedOut ? '' : 'none';
 
   if (isEnded) {
-    // Show result panel
     guessCard.style.display = 'none';
     lockedBadge.style.display = 'none';
+    timesupBanner.style.display = 'none';
     resultCard.style.display = '';
-    renderResult(round, myGuess);
-  } else if (myGuess) {
-    // Locked in
+    renderResult(round, myGuesses);
+  } else if (isTimedOut) {
+    guessCard.style.display = 'none';
+    lockedBadge.style.display = 'none';
+    resultCard.style.display = 'none';
+  } else if (singleGuessLocked) {
+    // Legacy single-guess: show locked badge
     guessCard.style.display = 'none';
     lockedBadge.style.display = '';
     resultCard.style.display = 'none';
-    document.getElementById('locked-number').textContent = 'Your guess: ' + myGuess.guess;
+    document.getElementById('locked-number').textContent = 'Your guess: ' + myGuesses[0].guess;
   } else {
-    // Show guess UI
+    // Multi-guess or pre-guess state
     guessCard.style.display = '';
     lockedBadge.style.display = 'none';
     resultCard.style.display = 'none';
-    document.getElementById('guess-btn').disabled = !round || !appPubkey || sending;
+    updateGuessCard(round, myGuesses, maxGuesses, allGuessesUsed);
   }
 }
 
-function renderResult(round, myGuess) {
+function updateGuessCard(round, myGuesses, maxGuesses, allGuessesUsed) {
+  const counter = document.getElementById('guess-counter');
+  const myGuessesList = document.getElementById('my-guesses-list');
+  const guessInputArea = document.getElementById('guess-input-area');
+  const allUsedMsg = document.getElementById('all-guesses-used-msg');
+  const guessBtn = document.getElementById('guess-btn');
+
+  if (maxGuesses > 1) {
+    counter.style.display = '';
+    const used = myGuesses.length;
+    const remaining = maxGuesses - used;
+    counter.textContent = used + ' of ' + maxGuesses + ' guesses used' +
+      (remaining > 0 ? ' · ' + remaining + ' remaining' : '');
+  } else {
+    counter.style.display = 'none';
+  }
+
+  if (myGuesses.length > 0) {
+    myGuessesList.style.display = '';
+    myGuessesList.innerHTML = '<div class="my-guesses-label">My guesses this round</div>' +
+      myGuesses.map((g, i) =>
+        '<div class="my-guess-row">' +
+        '<span class="my-guess-val">' + g.guess + '</span>' +
+        '<span class="my-guess-tag">Guess ' + (i + 1) + '</span>' +
+        '</div>'
+      ).join('');
+  } else {
+    myGuessesList.style.display = 'none';
+  }
+
+  if (allGuessesUsed) {
+    guessInputArea.style.display = 'none';
+    allUsedMsg.style.display = '';
+  } else {
+    guessInputArea.style.display = '';
+    allUsedMsg.style.display = 'none';
+    guessBtn.disabled = !round || !appPubkey || sending;
+  }
+}
+
+function renderResult(round, myGuesses) {
   const secret = round.secret;
   document.getElementById('result-secret').textContent = secret != null ? secret : '?';
+
+  const isTimed = round.mode === 'timed';
+  const noWinner = !round.winner;
+
+  // Heading for timed-mode no-winner case
+  const headingEl = document.getElementById('result-heading');
+  if (isTimed && noWinner) {
+    headingEl.textContent = '⏰ TIME\'S UP';
+    headingEl.style.display = '';
+  } else {
+    headingEl.style.display = 'none';
+  }
 
   const winnerName = round.winner
     ? (window.UsernodeUsernames ? UsernodeUsernames.getUsernameSync(round.winner) : defName(round.winner))
     : '—';
   document.getElementById('result-winner').textContent =
-    round.winner ? ('🏆 ' + escapeHtml(winnerName) + ' guessed ' + round.winnerGuess) : 'No winner';
+    round.winner ? ('🏆 ' + escapeHtml(winnerName) + ' guessed ' + round.winnerGuess) : 'No winner this round';
 
-  if (myGuess && secret != null) {
-    const dist = Math.abs(myGuess.guess - secret);
+  // Show best guess from player
+  const bestGuess = getMyBestGuess(round, myGuesses);
+  if (bestGuess && secret != null) {
+    const dist = Math.abs(bestGuess.guess - secret);
     const isBullseye = dist === 0;
     document.getElementById('bullseye-badge').style.display = isBullseye ? '' : 'none';
     document.getElementById('result-mine').textContent =
       isBullseye ? 'You nailed it!' :
-      'Your guess was ' + myGuess.guess + ' — ' + dist + ' away';
+      (myGuesses.length > 1
+        ? 'Your best guess was ' + bestGuess.guess + ' — ' + dist + ' away'
+        : 'Your guess was ' + bestGuess.guess + ' — ' + dist + ' away');
   } else {
     document.getElementById('bullseye-badge').style.display = 'none';
-    document.getElementById('result-mine').textContent = myGuess ? '' : "You didn't guess this round";
+    document.getElementById('result-mine').textContent = myGuesses.length > 0 ? '' : "You didn't guess this round";
   }
 
-  // Check if next round is already available
-  const nextRounds = (gameState.pastRounds || []).concat(gameState.currentRound ? [gameState.currentRound] : []);
   const hasNext = gameState.currentRound && !gameState.currentRound.endedAt;
   document.getElementById('next-round-label').textContent =
     hasNext ? '' : 'Next round starting soon…';
@@ -824,6 +1168,7 @@ function renderHistory() {
     const winnerName = r.winner ? escapeHtml(getName(r.winner)) : '—';
     const date = r.endedAt ? new Date(r.endedAt).toLocaleDateString() : '';
     const id = 'hist-' + r.id;
+    const modeTag = r.mode === 'timed' ? ' ⏱' : '';
     const guessRows = (r.guesses || []).map((g) => {
       const isWinner = g.from === r.winner;
       const isMe = g.from === myAddress;
@@ -839,9 +1184,9 @@ function renderHistory() {
 
     return '<div class="hist-round">' +
       '<div class="hist-header" onclick="toggleHist(\'' + id + '\')">' +
-      '<div class="hist-round-num">Round ' + r.id + '</div>' +
+      '<div class="hist-round-num">Round ' + r.id + modeTag + '</div>' +
       '<div class="hist-secret">' + (r.secret != null ? r.secret : '?') + '</div>' +
-      '<div class="hist-info">' + escapeHtml(winnerName) + ' won · ' + (r.participants || r.guesses.length) + ' players · ' + date + '</div>' +
+      '<div class="hist-info">' + winnerName + ' won · ' + (r.participants || r.guesses.length) + ' players · ' + date + '</div>' +
       '<div class="hist-toggle" id="tog-' + id + '">▼</div>' +
       '</div>' +
       '<div class="hist-body" id="' + id + '">' + guessRows + '</div>' +
@@ -875,7 +1220,7 @@ async function init() {
   // Extract JWT token from URL
   const params = new URLSearchParams(window.location.search);
   const token = params.get('token') || '';
-  // Store for fetch headers (bridge handles wallet auth, server uses JWT)
+  // Store for fetch headers (streak endpoint needs it)
   window._ngToken = token;
 
   try {

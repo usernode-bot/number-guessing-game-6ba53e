@@ -63,7 +63,7 @@ function createGame(opts) {
     if (id == null) return;
     const existing = rounds.get(id);
     if (existing && !existing.endedAt) {
-      // Extension: update endsAt for same round
+      // Extension: update endsAt for same round only
       const dur = memo.active_duration_ms || timerDurationMs;
       existing.endsAt = tx.ts + dur;
       existing.activeDurationMs = dur;
@@ -74,7 +74,9 @@ function createGame(opts) {
       id,
       seedHash: memo.seed_hash,
       activeDurationMs: memo.active_duration_ms || timerDurationMs,
-      minPlayers: memo.min_players || minPlayers,
+      minPlayers: memo.min_players != null ? memo.min_players : minPlayers,
+      maxGuessesPerPlayer: memo.max_guesses_per_player != null ? memo.max_guesses_per_player : 1,
+      mode: memo.mode || 'normal',
       startedAt: tx.ts,
       endsAt: tx.ts + (memo.active_duration_ms || timerDurationMs),
       guesses: [],
@@ -94,9 +96,9 @@ function createGame(opts) {
     if (round.endedAt) return; // round already ended
     const guess = parseInt(memo.guess, 10);
     if (!Number.isFinite(guess) || guess < 1 || guess > 100) return;
-    // One guess per player per round — oldest wins
-    const alreadyGuessed = round.guesses.some((g) => g.from === tx.from);
-    if (alreadyGuessed) return;
+    // Multi-guess support: count existing guesses from this player
+    const playerGuessCount = round.guesses.filter((g) => g.from === tx.from).length;
+    if (playerGuessCount >= round.maxGuessesPerPlayer) return;
     round.guesses.push({ from: tx.from, amount: tx.amount, guess, ts: tx.ts });
   }
 
@@ -120,11 +122,19 @@ function createGame(opts) {
   function findWinner(round) {
     if (!round.guesses.length) return null;
     const secret = computeSecret(round.seedHash);
-    // Dedup by player — keep earliest guess per player
+    // Dedup by player — keep best guess (closest to secret), tie-break by earliest
     const byPlayer = new Map();
     for (const g of round.guesses) {
       const existing = byPlayer.get(g.from);
-      if (!existing || g.ts < existing.ts) byPlayer.set(g.from, g);
+      if (!existing) {
+        byPlayer.set(g.from, g);
+      } else {
+        const existingDist = Math.abs(existing.guess - secret);
+        const newDist = Math.abs(g.guess - secret);
+        if (newDist < existingDist || (newDist === existingDist && g.ts < existing.ts)) {
+          byPlayer.set(g.from, g);
+        }
+      }
     }
     const candidates = Array.from(byPlayer.values());
     candidates.sort((a, b) => {
@@ -168,7 +178,7 @@ function createGame(opts) {
       if (secret != null && r.winnerGuess != null) {
         stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
       }
-      // all guessers
+      // all guessers (use their best guess for bestDist)
       for (const g of r.guesses) {
         if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity };
         if (secret != null) {
@@ -195,6 +205,8 @@ function createGame(opts) {
         startedAt: currentRound.startedAt,
         endsAt: currentRound.endsAt,
         minPlayers: currentRound.minPlayers,
+        maxGuessesPerPlayer: currentRound.maxGuessesPerPlayer,
+        mode: currentRound.mode,
         participants: currentRound.guesses.length,
         pot: currentRound.guesses.reduce((s, g) => s + g.amount, 0),
         guesses: currentRound.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
@@ -216,6 +228,8 @@ function createGame(opts) {
         winnerGuess: r.winnerGuess,
         pot: r.pot,
         participants: r.participants,
+        mode: r.mode,
+        maxGuessesPerPlayer: r.maxGuessesPerPlayer,
         guesses: r.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
       })),
       playerStats,
