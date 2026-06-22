@@ -799,8 +799,21 @@ app.post('/__numguess/admin/start', async (req, res) => {
   }
 });
 
-// Mock-enabled probe — always respond so the bridge doesn't fall through to the 401 catch-all
-app.get('/__mock/enabled', (_req, res) => res.json({ enabled: !!mockApi }));
+// Mock-enabled probe. The bridge (usernode-bridge.js) decides mock vs. real
+// transaction path from the HTTP STATUS of this probe (resp.ok), not the body.
+// So this MUST be non-2xx when the mock API isn't active, or the deployed app
+// is misdetected as local-dev and routes every send to /__mock/* (which 404s,
+// surfacing "Mock API not enabled"). 200 only under --local-dev; 404 otherwise.
+// An explicit 404 also keeps the probe from falling through to the 401 catch-all.
+function mockEnabledPayload(api) {
+  return api
+    ? { status: 200, body: { enabled: true } }
+    : { status: 404, body: { enabled: false } };
+}
+app.get('/__mock/enabled', (_req, res) => {
+  const { status, body } = mockEnabledPayload(mockApi);
+  res.status(status).json(body);
+});
 
 // Favicon — serve as SVG so the browser stops logging 401s for this automatic request
 const FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎯</text></svg>';
@@ -901,4 +914,11 @@ async function start() {
   app.listen(port, () => console.log(`Number Guessing Game listening on :${port}`));
 }
 
-start().catch((err) => { console.error(err); process.exit(1); });
+// Only boot the server when run directly (`node server.js`). When required as
+// a module (e.g. by the test suite) we expose `app` and the route helper
+// without listening on a port or touching the database.
+if (require.main === module) {
+  start().catch((err) => { console.error(err); process.exit(1); });
+}
+
+module.exports = { app, mockEnabledPayload };
