@@ -3,16 +3,10 @@
   "secrets": [
     {
       "key": "APP_SECRET_KEY",
-      "description": "Secret key for the game wallet, used to sign server-side payout transactions.",
-      "required": false,
+      "description": "Secret key for the game wallet (paired with the hardcoded APP_PUBKEY), used to sign server-side round-lifecycle and payout transactions on the real testnet. Required in production; staging resolves to an empty key and skips real payouts.",
+      "required": true,
       "private": true,
       "staging_default": ""
-    },
-    {
-      "key": "NODE_RPC_URL",
-      "description": "Sidecar Usernode RPC endpoint. Resolves via Docker network in production.",
-      "required": false,
-      "default": "http://usernode-node:3000"
     },
     {
       "key": "TIMER_DURATION_MS",
