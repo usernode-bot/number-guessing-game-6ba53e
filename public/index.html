@@ -1365,16 +1365,11 @@ async function init() {
   window._ngToken = token;
 
   try {
-    const mockEnabled = (window.usernode && typeof window.usernode.isMockEnabled === 'function')
-      ? await Promise.resolve(window.usernode.isMockEnabled()).catch(() => false)
-      : false;
-
-    if (!mockEnabled) {
-      try {
-        await window.discoverChainId();
-      } catch (e) {
-        console.warn('discoverChainId failed:', e.message);
-      }
+    // No mock mode — always discover the live chain id via the hosted bridge.
+    try {
+      await window.discoverChainId();
+    } catch (e) {
+      console.warn('discoverChainId failed:', e.message);
     }
 
     try {

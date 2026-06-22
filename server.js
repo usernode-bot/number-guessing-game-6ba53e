@@ -13,7 +13,6 @@ const {
   createAppStateCache,
   createUsernamesCache,
   createNodeStatusProbe,
-  createMockApi,
   EXPLORER_PROXY_PREFIX,
 } = require('./lib/dapp-server');
 const { createGame, DIFFICULTIES } = require('./game-logic');
@@ -32,7 +31,6 @@ const TIMER_DURATION_MS = parseInt(process.env.TIMER_DURATION_MS || '86400000', 
 const ROUND_TIMED_MS = parseInt(process.env.ROUND_TIMED_MS || '60000', 10);
 const MIN_PLAYERS = parseInt(process.env.MIN_PLAYERS || '2', 10);
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
-const LOCAL_DEV = process.argv.includes('--local-dev');
 
 const TRACKS = ['1h', '6h', '1d', '1w'];
 const TRACK_DURATIONS = {
@@ -84,27 +82,20 @@ app.use((req, res, next) => {
 
 const game = createGame({ appPubkey: APP_PUBKEY, timerDurationMs: TIMER_DURATION_MS, minPlayers: MIN_PLAYERS });
 
-const mockApi = LOCAL_DEV ? createMockApi({ appPubkey: APP_PUBKEY }) : null;
-
 const numguessCache = createAppStateCache({
   name: 'numguess',
   appPubkey: APP_PUBKEY,
   queryField: 'recipient',
   processTransaction: game.processTransaction,
   nodeRpcUrl: NODE_RPC_URL,
-  localDev: LOCAL_DEV,
-  mockTransactions: mockApi ? mockApi.transactions : null,
 });
 
 const usernamesCache = createUsernamesCache({
   nodeRpcUrl: NODE_RPC_URL,
-  localDev: LOCAL_DEV,
-  mockTransactions: mockApi ? mockApi.transactions : null,
 });
 
 const nodeStatusProbe = createNodeStatusProbe({
   nodeRpcUrl: NODE_RPC_URL,
-  localDev: LOCAL_DEV,
 });
 
 nodeStatusProbe.registerStream('numguess', () => numguessCache.isStreamReady());
@@ -463,10 +454,23 @@ function injectStagingSeeds() {
     { id: 'staging-u11', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'kate_s' }), timestamp_ms: now - 31 * day },
   ];
 
+  // Route each seed tx to the right cache: numguess txs drive the game state,
+  // while `set_username` txs must populate the usernames cache (the real, and
+  // now only, source of names) so seeded players render their friendly names.
+  const usernameSeedTxs = [];
   for (const tx of fakeTxs) {
-    game.processTransaction(tx);
+    let memo = tx.memo;
+    if (typeof memo === 'string') {
+      try { memo = JSON.parse(memo); } catch { memo = null; }
+    }
+    if (memo && memo.app === 'usernames') {
+      usernameSeedTxs.push(tx);
+    } else {
+      game.processTransaction(tx);
+    }
   }
-  console.log('[staging] Injected', fakeTxs.length, 'seed transactions');
+  usernamesCache.injectSeedTransactions(usernameSeedTxs);
+  console.log('[staging] Injected', fakeTxs.length, 'seed transactions (', usernameSeedTxs.length, 'usernames )');
 }
 
 async function seedStagingDb() {
@@ -790,14 +794,6 @@ app.use((req, res, next) => {
   handleExplorerProxy(req, res, req.path);
 });
 
-// Mock API (local dev only)
-if (mockApi) {
-  app.use((req, res, next) => {
-    if (mockApi.handleRequest(req, res, req.path)) return;
-    next();
-  });
-}
-
 // Cache / status handlers
 app.use((req, res, next) => {
   if (numguessCache.handleRequest(req, res, req.path)) return;
@@ -872,8 +868,10 @@ app.post('/__numguess/admin/start', async (req, res) => {
   }
 });
 
-// Mock-enabled probe — always respond so the bridge doesn't fall through to the 401 catch-all
-app.get('/__mock/enabled', (_req, res) => res.json({ enabled: !!mockApi }));
+// Mock-enabled probe — the hosted bridge probes this to decide mock mode.
+// This app has no mock layer: always answer false so the bridge stays on the
+// real network path (and so the probe doesn't fall through to the 401 catch-all).
+app.get('/__mock/enabled', (_req, res) => res.json({ enabled: false }));
 
 // Favicon — serve as SVG so the browser stops logging 401s for this automatic request
 const FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎯</text></svg>';
@@ -955,7 +953,7 @@ async function start() {
       if (!current) {
         if (APP_SECRET_KEY) {
           postStartRound(track).catch((e) => console.error(`[boot:${track}] failed to create initial round:`, e.message));
-        } else if (IS_STAGING || LOCAL_DEV) {
+        } else if (IS_STAGING) {
           try { await postStartRound(track); } catch (e) { console.error(`[boot:${track}] failed:`, e.message); }
         } else {
           console.warn(`[boot:${track}] APP_SECRET_KEY not set and not staging — skipping auto round creation`);
