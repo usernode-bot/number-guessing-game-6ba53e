@@ -16,7 +16,7 @@ const {
   createMockApi,
   EXPLORER_PROXY_PREFIX,
 } = require('./lib/dapp-server');
-const { createGame } = require('./game-logic');
+const { createGame, DIFFICULTIES } = require('./game-logic');
 
 loadEnvFile();
 
@@ -42,8 +42,8 @@ const TRACK_DURATIONS = {
   '1w': 604800000,
 };
 
-// Per-track pending hard mode config (resets to false after each round starts)
-const pendingHardMode = { '1h': false, '6h': false, '1d': false, '1w': false };
+// Per-track pending difficulty for next round (resets to 'medium' after each round starts)
+const pendingDifficulty = { '1h': 'medium', '6h': 'medium', '1d': 'medium', '1w': 'medium' };
 
 // Per-track payout guards
 const inFlightPayout = { '1h': false, '6h': false, '1d': false, '1w': false };
@@ -380,6 +380,75 @@ function injectStagingSeeds() {
     { id: 'staging-r30-g10', to: APP_PUBKEY, from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 30, guess: 65 }), timestamp_ms: now - 20 * day + 10 * hour },
     { id: 'staging-r30-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 30, secret: 65, winner: p11, winner_guess: 65, pot: 10, participants: 2 }), timestamp_ms: now - 19 * day },
 
+    // ---- EASY DIFFICULTY ROUNDS (range 1–10) ----
+    // Seed hashes: parseInt(hash.slice(0,8),16) % 10 == secret-1
+    // secret=5: "00000004"=4, 4%10=4, +1=5. secret=3: "00000002"=2, 2%10=2, +1=3. secret=7: "00000006"=6, 6%10=6, +1=7.
+
+    // Round 50 — Easy, 1d, secret=5 — alice_s wins with 1 guess (bullseye)
+    { id: 'staging-r50-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 50, seed_hash: '00000004' + 'a'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 5, mode: 'normal', duration_track: '1d', difficulty: 'easy' }), timestamp_ms: now - 50 * day },
+    { id: 'staging-r50-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 50, guess: 5 }), timestamp_ms: now - 50 * day + hour },
+    { id: 'staging-r50-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 50, guess: 3 }), timestamp_ms: now - 50 * day + 2 * hour },
+    { id: 'staging-r50-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 50, guess: 8 }), timestamp_ms: now - 50 * day + 3 * hour },
+    { id: 'staging-r50-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 50, secret: 5, winner: p1, winner_guess: 5, pot: 3, participants: 3 }), timestamp_ms: now - 49 * day },
+
+    // Round 51 — Easy, 1d, secret=3 — bob_s wins with 2 guesses
+    { id: 'staging-r51-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 51, seed_hash: '00000002' + 'b'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 5, mode: 'normal', duration_track: '1d', difficulty: 'easy' }), timestamp_ms: now - 49 * day },
+    { id: 'staging-r51-g1', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 51, guess: 7 }), timestamp_ms: now - 49 * day + hour },
+    { id: 'staging-r51-g2', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 51, guess: 6 }), timestamp_ms: now - 49 * day + 2 * hour },
+    { id: 'staging-r51-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 51, guess: 1 }), timestamp_ms: now - 49 * day + 3 * hour },
+    { id: 'staging-r51-g4', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 51, guess: 3 }), timestamp_ms: now - 49 * day + 4 * hour },
+    { id: 'staging-r51-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 51, secret: 3, winner: p2, winner_guess: 3, pot: 4, participants: 3 }), timestamp_ms: now - 48 * day },
+
+    // Round 52 — Easy, 1d, secret=7 — carol_s wins with 4 guesses
+    { id: 'staging-r52-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 52, seed_hash: '00000006' + 'c'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 5, mode: 'normal', duration_track: '1d', difficulty: 'easy' }), timestamp_ms: now - 48 * day },
+    { id: 'staging-r52-g1', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 52, guess: 2 }), timestamp_ms: now - 48 * day + hour },
+    { id: 'staging-r52-g2', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 52, guess: 4 }), timestamp_ms: now - 48 * day + 2 * hour },
+    { id: 'staging-r52-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 52, guess: 9 }), timestamp_ms: now - 48 * day + 3 * hour },
+    { id: 'staging-r52-g4', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 52, guess: 8 }), timestamp_ms: now - 48 * day + 4 * hour },
+    { id: 'staging-r52-g5', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 52, guess: 5 }), timestamp_ms: now - 48 * day + 5 * hour },
+    { id: 'staging-r52-g6', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 52, guess: 7 }), timestamp_ms: now - 48 * day + 6 * hour },
+    { id: 'staging-r52-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 52, secret: 7, winner: p3, winner_guess: 7, pot: 6, participants: 3 }), timestamp_ms: now - 47 * day },
+
+    // ---- HARD DIFFICULTY ROUNDS (range 1–1000) ----
+    // Seed hashes: parseInt(hash.slice(0,8),16) % 1000 == secret-1
+    // secret=500: "000001f3"=499, 499%1000=499, +1=500. secret=750: "000002ed"=749, 749%1000=749, +1=750. secret=250: "000000f9"=249, 249%1000=249, +1=250.
+
+    // Round 60 — Hard, 1d, secret=500 — dave_s wins with 4 guesses
+    { id: 'staging-r60-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 60, seed_hash: '000001f3' + 'd'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 15, mode: 'normal', duration_track: '1d', difficulty: 'hard' }), timestamp_ms: now - 45 * day },
+    { id: 'staging-r60-g1', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 60, guess: 250 }), timestamp_ms: now - 45 * day + hour },
+    { id: 'staging-r60-g2', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 60, guess: 600 }), timestamp_ms: now - 45 * day + 2 * hour },
+    { id: 'staging-r60-g3', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 60, guess: 750 }), timestamp_ms: now - 45 * day + 3 * hour },
+    { id: 'staging-r60-g4', to: APP_PUBKEY, from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 60, guess: 300 }), timestamp_ms: now - 45 * day + 4 * hour },
+    { id: 'staging-r60-g5', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 60, guess: 400 }), timestamp_ms: now - 45 * day + 5 * hour },
+    { id: 'staging-r60-g6', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 60, guess: 500 }), timestamp_ms: now - 45 * day + 6 * hour },
+    { id: 'staging-r60-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 60, secret: 500, winner: p4, winner_guess: 500, pot: 6, participants: 3 }), timestamp_ms: now - 44 * day },
+
+    // Round 61 — Hard, 1d, secret=750 — eve_s wins with 7 guesses
+    { id: 'staging-r61-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 61, seed_hash: '000002ed' + 'e'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 15, mode: 'normal', duration_track: '1d', difficulty: 'hard' }), timestamp_ms: now - 44 * day },
+    { id: 'staging-r61-g1', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 61, guess: 500 }), timestamp_ms: now - 44 * day + hour },
+    { id: 'staging-r61-g2', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 61, guess: 700 }), timestamp_ms: now - 44 * day + 2 * hour },
+    { id: 'staging-r61-g3', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 61, guess: 900 }), timestamp_ms: now - 44 * day + 3 * hour },
+    { id: 'staging-r61-g4', to: APP_PUBKEY, from_pubkey: p6, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 61, guess: 800 }), timestamp_ms: now - 44 * day + 4 * hour },
+    { id: 'staging-r61-g5', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 61, guess: 800 }), timestamp_ms: now - 44 * day + 5 * hour },
+    { id: 'staging-r61-g6', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 61, guess: 780 }), timestamp_ms: now - 44 * day + 6 * hour },
+    { id: 'staging-r61-g7', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 61, guess: 760 }), timestamp_ms: now - 44 * day + 7 * hour },
+    { id: 'staging-r61-g8', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 61, guess: 750 }), timestamp_ms: now - 44 * day + 8 * hour },
+    { id: 'staging-r61-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 61, secret: 750, winner: p5, winner_guess: 750, pot: 8, participants: 3 }), timestamp_ms: now - 43 * day },
+
+    // Round 62 — Hard, 1d, secret=250 — alice_s wins with 10 guesses
+    { id: 'staging-r62-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 62, seed_hash: '000000f9' + 'f'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 15, mode: 'normal', duration_track: '1d', difficulty: 'hard' }), timestamp_ms: now - 43 * day },
+    { id: 'staging-r62-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 500 }), timestamp_ms: now - 43 * day + hour },
+    { id: 'staging-r62-g2', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 400 }), timestamp_ms: now - 43 * day + 2 * hour },
+    { id: 'staging-r62-g3', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 200 }), timestamp_ms: now - 43 * day + 3 * hour },
+    { id: 'staging-r62-g4', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 600 }), timestamp_ms: now - 43 * day + 4 * hour },
+    { id: 'staging-r62-g5', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 100 }), timestamp_ms: now - 43 * day + 5 * hour },
+    { id: 'staging-r62-g6', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 700 }), timestamp_ms: now - 43 * day + 6 * hour },
+    { id: 'staging-r62-g7', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 300 }), timestamp_ms: now - 43 * day + 7 * hour },
+    { id: 'staging-r62-g8', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 800 }), timestamp_ms: now - 43 * day + 8 * hour },
+    { id: 'staging-r62-g9', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 230 }), timestamp_ms: now - 43 * day + 9 * hour },
+    { id: 'staging-r62-g10', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 250 }), timestamp_ms: now - 43 * day + 10 * hour },
+    { id: 'staging-r62-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 62, secret: 250, winner: p1, winner_guess: 250, pot: 10, participants: 3 }), timestamp_ms: now - 42 * day },
+
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
     { id: 'staging-u2', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'bob_s' }), timestamp_ms: now - 3 * day },
@@ -529,7 +598,7 @@ async function concludeRound(round, track) {
   inFlightPayout[track] = true;
 
   try {
-    const secret = game.computeSecret(round.seedHash);
+    const secret = game.computeSecret(round.seedHash, round.range);
     const result = game.findWinner(round);
     if (!result || !result.winner) {
       console.log(`[payout:${track}] No valid guesses, skipping payout, starting next round`);
@@ -607,10 +676,10 @@ async function postStartRound(track) {
   const roundId = maxId + 1;
 
   const activeDurationMs = TRACK_DURATIONS[track] || TIMER_DURATION_MS;
-  const isHard = !!pendingHardMode[track];
-  pendingHardMode[track] = false; // consume config, reset to default
-
-  const maxGuessesPerPlayer = isHard ? 5 : 10;
+  const difficulty = pendingDifficulty[track] || 'medium';
+  pendingDifficulty[track] = 'medium'; // consume config, reset to default
+  const diffConfig = DIFFICULTIES[difficulty] || DIFFICULTIES.medium;
+  const maxGuessesPerPlayer = diffConfig.maxGuesses;
   const roundMinPlayers = track === '1w' ? 1 : MIN_PLAYERS;
 
   const seedHash = crypto.randomBytes(32).toString('hex');
@@ -624,6 +693,7 @@ async function postStartRound(track) {
     max_guesses_per_player: maxGuessesPerPlayer,
     mode: 'normal',
     duration_track: track,
+    difficulty,
   };
 
   if (APP_SECRET_KEY) {
@@ -744,7 +814,7 @@ app.get('/__numguess/state', async (req, res) => {
   }
   res.set('cache-control', 'no-store');
   const state = game.getStateResponse();
-  state.pendingHardMode = { ...pendingHardMode };
+  state.pendingDifficulty = { ...pendingDifficulty };
 
   if (pool && req.user && req.user.usernode_pubkey) {
     try {
@@ -774,15 +844,18 @@ app.get('/__numguess/state', async (req, res) => {
 
 const VALID_TRACKS = new Set(['1h', '6h', '1d', '1w']);
 
-// Admin: set hard mode for a specific track's next round
+// Admin: set difficulty for a specific track's next round
 app.post('/__numguess/admin/set-mode', (req, res) => {
-  const { track, hardMode } = req.body || {};
+  const { track, difficulty } = req.body || {};
   if (!VALID_TRACKS.has(track)) {
     return res.status(400).json({ error: 'Invalid track. Must be one of: 1h, 6h, 1d, 1w' });
   }
-  pendingHardMode[track] = !!hardMode;
-  console.log('[admin] pendingHardMode updated:', pendingHardMode);
-  res.json({ ok: true, pendingHardMode });
+  if (!DIFFICULTIES[difficulty]) {
+    return res.status(400).json({ error: 'Invalid difficulty. Must be one of: easy, medium, hard' });
+  }
+  pendingDifficulty[track] = difficulty;
+  console.log('[admin] pendingDifficulty updated:', pendingDifficulty);
+  res.json({ ok: true, pendingDifficulty });
 });
 
 // Admin: manually start a new round for a specific track

@@ -547,7 +547,7 @@
 
     <!-- Guess card -->
     <div class="card guess-card" id="guess-card">
-      <div class="guess-label">Pick a number between 1 and 100</div>
+      <div class="guess-label" id="guess-label">Pick a number between 1 and 100</div>
       <div id="guess-counter" class="guess-counter" style="display:none"></div>
       <div id="my-guesses-list" class="my-guesses" style="display:none"></div>
       <div id="guess-input-area">
@@ -590,11 +590,10 @@
 
   <!-- Leaderboard Panel -->
   <div class="panel" id="panel-leaderboard">
-    <div class="segment track-selector" id="lb-track-selector">
-      <button class="seg-btn" id="lb-1h" onclick="setLbTrack('1h')">1H</button>
-      <button class="seg-btn" id="lb-6h" onclick="setLbTrack('6h')">6H</button>
-      <button class="seg-btn active" id="lb-1d" onclick="setLbTrack('1d')">1D</button>
-      <button class="seg-btn" id="lb-1w" onclick="setLbTrack('1w')">1W</button>
+    <div class="segment track-selector" id="lb-difficulty-selector">
+      <button class="seg-btn" id="lb-easy" onclick="setLbDifficulty('easy')">Easy</button>
+      <button class="seg-btn active" id="lb-medium" onclick="setLbDifficulty('medium')">Medium</button>
+      <button class="seg-btn" id="lb-hard" onclick="setLbDifficulty('hard')">Hard</button>
     </div>
     <div class="section-header">All-time leaderboard</div>
     <div class="card" id="leaderboard-list">
@@ -658,12 +657,13 @@
   <div class="modal">
     <button class="modal-close" onclick="closeModePicker()">✕</button>
     <div class="modal-title" id="mode-picker-title">⚙ Round Settings</div>
-    <div class="mode-picker-note">Settings apply when the next round starts for this track. Any logged-in player can set this.</div>
+    <div class="mode-picker-note">Difficulty applies when the next round starts for this track. Any logged-in player can set this.</div>
 
-    <div class="mode-section-label">Guess limit per player</div>
-    <div class="segment">
-      <button class="seg-btn active" id="seg-normal" onclick="setSegment('normal')">Normal (10 guesses)</button>
-      <button class="seg-btn" id="seg-hard" onclick="setSegment('hard')">Hard (5 guesses)</button>
+    <div class="mode-section-label">Difficulty</div>
+    <div class="segment" style="flex-direction:column;gap:.5rem">
+      <button class="seg-btn" id="seg-easy" onclick="setSegment('easy')">Easy — 1 to 10 · 5 guesses</button>
+      <button class="seg-btn active" id="seg-medium" onclick="setSegment('medium')">Medium — 1 to 100 · 10 guesses</button>
+      <button class="seg-btn" id="seg-hard" onclick="setSegment('hard')">Hard — 1 to 1000 · 15 guesses</button>
     </div>
 
     <button class="btn" id="mode-save-btn" onclick="saveMode()">Set for Next Round</button>
@@ -692,10 +692,10 @@ let countdownTimer = null;
 const prevEndedAt = { '1h': null, '6h': null, '1d': null, '1w': null };
 let prevStreakValue = -1;
 let prevCountdownRemaining = Infinity;
-let pickerSegment = 'normal';
+let pickerSegment = 'medium';
 
 let selectedTrack = '1d';
-let selectedLbTrack = '1d';
+let selectedDifficulty = 'medium';
 let selectedHistTrack = '1d';
 
 let winAutoSwitchTimer = null;
@@ -735,10 +735,10 @@ function setGameTrack(track) {
   if (gameState) render();
 }
 
-function setLbTrack(track) {
-  selectedLbTrack = track;
-  TRACKS.forEach((t) => {
-    document.getElementById('lb-' + t).classList.toggle('active', t === track);
+function setLbDifficulty(diff) {
+  selectedDifficulty = diff;
+  ['easy', 'medium', 'hard'].forEach((d) => {
+    document.getElementById('lb-' + d).classList.toggle('active', d === diff);
   });
   if (gameState) renderLeaderboard();
 }
@@ -779,7 +779,8 @@ function setSending(val) {
 const slider = document.getElementById('guess-slider');
 const numInput = document.getElementById('guess-number');
 function updateSliderFill() {
-  const pct = ((slider.value - 1) / 99 * 100).toFixed(1);
+  const range = parseInt(slider.max, 10) || 100;
+  const pct = ((slider.value - 1) / (range - 1) * 100).toFixed(1);
   slider.style.setProperty('--val', pct + '%');
 }
 slider.addEventListener('input', () => {
@@ -789,7 +790,8 @@ slider.addEventListener('input', () => {
 numInput.addEventListener('input', () => {
   let v = parseInt(numInput.value, 10);
   if (isNaN(v)) return;
-  v = Math.max(1, Math.min(100, v));
+  const range = parseInt(slider.max, 10) || 100;
+  v = Math.max(1, Math.min(range, v));
   slider.value = v;
   updateSliderFill();
 });
@@ -869,7 +871,8 @@ async function placeGuess() {
   if (!myAddress) { showError('Wallet not connected.'); return; }
 
   const guess = parseInt(document.getElementById('guess-slider').value, 10);
-  if (guess < 1 || guess > 100) { showError('Guess must be between 1 and 100.'); return; }
+  const roundRange = (round && round.range) ? round.range : 100;
+  if (guess < 1 || guess > roundRange) { showError('Guess must be between 1 and ' + roundRange + '.'); return; }
 
   const round = getActiveRound();
   if (!round) { showError('No active round.'); return; }
@@ -962,10 +965,11 @@ function openModePicker() {
   const modal = document.getElementById('mode-picker-modal');
   modal.classList.add('open');
   document.getElementById('mode-picker-title').textContent = '⚙ ' + selectedTrack.toUpperCase() + ' Round Settings';
-  const isHard = gameState && gameState.pendingHardMode && !!gameState.pendingHardMode[selectedTrack];
-  pickerSegment = isHard ? 'hard' : 'normal';
-  document.getElementById('seg-normal').classList.toggle('active', !isHard);
-  document.getElementById('seg-hard').classList.toggle('active', isHard);
+  const diff = (gameState && gameState.pendingDifficulty && gameState.pendingDifficulty[selectedTrack]) || 'medium';
+  pickerSegment = diff;
+  ['easy', 'medium', 'hard'].forEach((d) => {
+    document.getElementById('seg-' + d).classList.toggle('active', d === diff);
+  });
 }
 
 function closeModePicker() {
@@ -978,12 +982,13 @@ document.getElementById('mode-picker-modal').addEventListener('click', (e) => {
 
 function setSegment(mode) {
   pickerSegment = mode;
-  document.getElementById('seg-normal').classList.toggle('active', mode === 'normal');
-  document.getElementById('seg-hard').classList.toggle('active', mode === 'hard');
+  ['easy', 'medium', 'hard'].forEach((d) => {
+    document.getElementById('seg-' + d).classList.toggle('active', d === mode);
+  });
 }
 
 async function saveMode() {
-  const hardMode = pickerSegment === 'hard';
+  const difficulty = pickerSegment || 'medium';
   const btn = document.getElementById('mode-save-btn');
   btn.disabled = true;
   btn.textContent = 'Saving…';
@@ -994,7 +999,7 @@ async function saveMode() {
         'content-type': 'application/json',
         'x-usernode-token': window._ngToken || '',
       },
-      body: JSON.stringify({ track: selectedTrack, hardMode }),
+      body: JSON.stringify({ track: selectedTrack, difficulty }),
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     closeModePicker();
@@ -1075,20 +1080,19 @@ function render() {
     durationBadge.style.display = '';
 
     const modeBadge = document.getElementById('mode-badge');
-    const maxG = round.maxGuessesPerPlayer;
-    if (maxG && maxG > 1) {
-      const isHard = maxG <= 5;
-      modeBadge.style.display = '';
-      modeBadge.className = 'mode-badge' + (isHard ? ' hard' : '');
-      modeBadge.textContent = isHard ? 'Hard' : 'Normal';
-    } else {
-      modeBadge.style.display = 'none';
-    }
+    const diff = round.difficulty || 'medium';
+    const range = round.range || 100;
+    const diffLabels = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+    const diffCls = { easy: '', medium: '', hard: ' hard' };
+    modeBadge.style.display = '';
+    modeBadge.className = 'mode-badge' + (diffCls[diff] || '');
+    modeBadge.textContent = (diffLabels[diff] || diff) + ' · 1–' + range;
   } else {
     document.getElementById('round-badge').textContent = 'No active round';
     document.getElementById('players-info').textContent = '';
     document.getElementById('duration-badge').style.display = 'none';
     document.getElementById('mode-badge').style.display = 'none';
+    updateGuessRange(100);
   }
 
   // Settings button (visible when logged in)
@@ -1130,17 +1134,16 @@ function render() {
         if (!seenEndedRounds.has(pr.id)) {
           seenEndedRounds.add(pr.id);
           if (pr.winner === myAddress && currentTab === 'game') {
-            const winTrack = t;
+            const wonDifficulty = pr.difficulty || 'medium';
             winAutoSwitchTimer = setTimeout(() => {
               winAutoSwitchTimer = null;
               if (currentTab !== 'game') return;
-              // Switch to leaderboard without triggering switchTab's timer-cancel
               currentTab = 'leaderboard';
               ['game','leaderboard','history'].forEach((tab) => {
                 document.getElementById('panel-' + tab).classList.toggle('active', tab === 'leaderboard');
                 document.getElementById('nav-' + tab).classList.toggle('active', tab === 'leaderboard');
               });
-              setLbTrack(winTrack);
+              setLbDifficulty(wonDifficulty);
               renderLeaderboard();
               setTimeout(() => {
                 const myRow = document.querySelector('#leaderboard-list .lb-row.is-me');
@@ -1158,7 +1161,24 @@ function render() {
   renderHistory();
 }
 
+function updateGuessRange(range) {
+  range = range || 100;
+  const mid = Math.round(range / 2);
+  const slider = document.getElementById('guess-slider');
+  const number = document.getElementById('guess-number');
+  const labels = document.querySelectorAll('.range-labels span');
+  const label = document.getElementById('guess-label');
+  slider.min = 1; slider.max = range;
+  number.min = 1; number.max = range;
+  if (parseInt(slider.value, 10) > range) { slider.value = mid; number.value = mid; }
+  if (labels[0]) labels[0].textContent = '1';
+  if (labels[1]) labels[1].textContent = mid;
+  if (labels[2]) labels[2].textContent = range;
+  if (label) label.textContent = 'Pick a number between 1 and ' + range;
+}
+
 function renderGamePanel(round) {
+  updateGuessRange(round ? (round.range || 100) : 100);
   const guessCard = document.getElementById('guess-card');
   const lockedBadge = document.getElementById('locked-badge');
   const resultCard = document.getElementById('result-card');
@@ -1295,8 +1315,8 @@ function getName(addr) {
 }
 
 function renderLeaderboard() {
-  if (!gameState || !gameState.tracks) return;
-  const td = gameState.tracks[selectedLbTrack] || {};
+  if (!gameState || !gameState.difficulties) return;
+  const td = gameState.difficulties[selectedDifficulty] || {};
   const stats = td.playerStats || {};
   const entries = Object.entries(stats)
     .map(([pubkey, s]) => ({ pubkey, ...s }))
@@ -1347,6 +1367,7 @@ function renderHistory() {
     const date = r.endedAt ? new Date(r.endedAt).toLocaleDateString() : '';
     const id = 'hist-' + r.id;
     const modeTag = r.mode === 'timed' ? ' ⏱' : '';
+    const diffTag = r.difficulty && r.difficulty !== 'medium' ? ' · ' + r.difficulty.charAt(0).toUpperCase() + r.difficulty.slice(1) : '';
     const guessRows = (r.guesses || []).map((g) => {
       const isWinner = g.from === r.winner;
       const isMe = g.from === myAddress;
@@ -1362,7 +1383,7 @@ function renderHistory() {
 
     return '<div class="hist-round">' +
       '<div class="hist-header" onclick="toggleHist(\'' + id + '\')">' +
-      '<div class="hist-round-num">Round ' + r.id + modeTag + '</div>' +
+      '<div class="hist-round-num">Round ' + r.id + modeTag + diffTag + '</div>' +
       '<div class="hist-secret">' + (r.secret != null ? r.secret : '?') + '</div>' +
       '<div class="hist-info">' + winnerName + ' won · ' + (r.participants || r.guesses.length) + ' players · ' + date + '</div>' +
       '<div class="hist-toggle" id="tog-' + id + '">▼</div>' +
