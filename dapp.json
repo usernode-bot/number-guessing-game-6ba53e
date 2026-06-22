@@ -73,6 +73,31 @@
       "name": "State endpoint includes bestWinGuessCount in player stats",
       "path": "/__numguess/state",
       "expectText": "bestWinGuessCount"
+    },
+    {
+      "name": "State endpoint includes difficulties map",
+      "path": "/__numguess/state",
+      "expectText": "\"difficulties\""
+    },
+    {
+      "name": "State endpoint includes difficulty field on rounds",
+      "path": "/__numguess/state",
+      "expectText": "\"difficulty\""
+    },
+    {
+      "name": "State endpoint includes easy difficulty bucket",
+      "path": "/__numguess/state",
+      "expectText": "\"easy\""
+    },
+    {
+      "name": "State endpoint includes hard difficulty bucket",
+      "path": "/__numguess/state",
+      "expectText": "\"hard\""
+    },
+    {
+      "name": "Leaderboard difficulty selector renders",
+      "path": "/",
+      "expectSelector": "#lb-medium"
     }
   ]
 }

@@ -1,11 +1,10 @@
 'use strict';
 
-/**
- * Number Guessing Game logic.
- *
- * All state is reconstructed from on-chain memo transactions.
- * processTransaction is called for every tx where recipient === APP_PUBKEY.
- */
+const DIFFICULTIES = {
+  easy:   { range: 10,   maxGuesses: 5  },
+  medium: { range: 100,  maxGuesses: 10 },
+  hard:   { range: 1000, maxGuesses: 15 },
+};
 
 function createGame(opts) {
   opts = opts || {};
@@ -81,6 +80,8 @@ function createGame(opts) {
     const activeDurationMs = memo.active_duration_ms || timerDurationMs;
     const mode = memo.mode || 'normal';
     const durationTrack = memo.duration_track || inferTrack(activeDurationMs, mode);
+    const difficulty = (memo.difficulty && DIFFICULTIES[memo.difficulty]) ? memo.difficulty : 'medium';
+    const range = DIFFICULTIES[difficulty].range;
     rounds.set(id, {
       id,
       seedHash: memo.seed_hash,
@@ -89,6 +90,8 @@ function createGame(opts) {
       maxGuessesPerPlayer: memo.max_guesses_per_player != null ? memo.max_guesses_per_player : 1,
       mode,
       durationTrack,
+      difficulty,
+      range,
       startedAt: tx.ts,
       endsAt: tx.ts + activeDurationMs,
       guesses: [],
@@ -108,7 +111,7 @@ function createGame(opts) {
     if (!round) return; // no matching open round
     if (round.endedAt) return; // round already ended
     const guess = parseInt(memo.guess, 10);
-    if (!Number.isFinite(guess) || guess < 1 || guess > 100) return;
+    if (!Number.isFinite(guess) || guess < 1 || guess > (round.range || 100)) return;
     // Multi-guess support: count existing guesses from this player
     const playerGuessCount = round.guesses.filter((g) => g.from === tx.from).length;
     if (playerGuessCount >= round.maxGuessesPerPlayer) return;
@@ -129,13 +132,14 @@ function createGame(opts) {
     round.participants = memo.participants;
   }
 
-  function computeSecret(seedHash) {
-    return (parseInt(seedHash.slice(0, 8), 16) % 100) + 1;
+  function computeSecret(seedHash, range) {
+    range = range || 100;
+    return (parseInt(seedHash.slice(0, 8), 16) % range) + 1;
   }
 
   function findWinner(round) {
     if (!round.guesses.length) return null;
-    const secret = computeSecret(round.seedHash);
+    const secret = computeSecret(round.seedHash, round.range);
     // Dedup by player — keep best guess (closest to secret), tie-break by earliest
     const byPlayer = new Map();
     for (const g of round.guesses) {
@@ -188,7 +192,37 @@ function createGame(opts) {
     for (const [, r] of rounds) {
       if (!r.endedAt || !r.winner) continue;
       if (r.durationTrack !== track) continue;
-      const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash) : null);
+      const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
+      const w = r.winner;
+      if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+      stats[w].won++;
+      stats[w].tokensWon += r.pot || 0;
+      if (secret != null && r.winnerGuess != null) {
+        stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+      }
+      const winGuessCount = r.rawGuessCounts ? (r.rawGuessCounts[w] || 1) : 1;
+      stats[w].bestWinGuessCount = stats[w].bestWinGuessCount === null
+        ? winGuessCount
+        : Math.min(stats[w].bestWinGuessCount, winGuessCount);
+      for (const g of r.guesses) {
+        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        if (secret != null) {
+          stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
+        }
+      }
+    }
+    for (const k of Object.keys(stats)) {
+      if (stats[k].bestDist === Infinity) stats[k].bestDist = null;
+    }
+    return stats;
+  }
+
+  function getPlayerStatsForDifficulty(difficulty) {
+    const stats = {};
+    for (const [, r] of rounds) {
+      if (!r.endedAt || !r.winner) continue;
+      if ((r.difficulty || 'medium') !== difficulty) continue;
+      const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
       const w = r.winner;
       if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
       stats[w].won++;
@@ -240,7 +274,7 @@ function createGame(opts) {
     const stats = {};
     for (const [, r] of rounds) {
       if (!r.endedAt || !r.winner) continue;
-      const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash) : null);
+      const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
       const w = r.winner;
       if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity };
       stats[w].won++;
@@ -275,6 +309,8 @@ function createGame(opts) {
       maxGuessesPerPlayer: round.maxGuessesPerPlayer,
       mode: round.mode,
       durationTrack: round.durationTrack,
+      difficulty: round.difficulty || 'medium',
+      range: round.range || 100,
       participants: round.guesses.length,
       pot: round.guesses.reduce((s, g) => s + g.amount, 0),
       guesses: round.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
@@ -296,6 +332,8 @@ function createGame(opts) {
       participants: r.participants,
       mode: r.mode,
       durationTrack: r.durationTrack,
+      difficulty: r.difficulty || 'medium',
+      range: r.range || 100,
       maxGuessesPerPlayer: r.maxGuessesPerPlayer,
       guesses: r.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
     };
@@ -314,10 +352,15 @@ function createGame(opts) {
         playerStats,
       };
     }
+    const difficulties = {};
+    for (const diff of ['easy', 'medium', 'hard']) {
+      difficulties[diff] = { playerStats: getPlayerStatsForDifficulty(diff) };
+    }
     return {
       appPubkey,
       loading: false,
       tracks,
+      difficulties,
     };
   }
 
@@ -339,6 +382,7 @@ function createGame(opts) {
     getPastRounds,
     getPastRoundsForTrack,
     getPlayerStatsForTrack,
+    getPlayerStatsForDifficulty,
     getStateResponse,
     handleRequest,
     rounds,
@@ -347,4 +391,4 @@ function createGame(opts) {
   };
 }
 
-module.exports = { createGame };
+module.exports = { createGame, DIFFICULTIES };
