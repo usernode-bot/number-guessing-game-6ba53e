@@ -98,6 +98,16 @@
       "name": "Leaderboard difficulty selector renders",
       "path": "/",
       "expectSelector": "#lb-medium"
+    },
+    {
+      "name": "Mock probe reports disabled (no mock layer)",
+      "path": "/__mock/enabled",
+      "expectText": "{\"enabled\":false}"
+    },
+    {
+      "name": "Usernames cache serves seeded staging name",
+      "path": "/__usernames/state",
+      "expectText": "alice_s"
     }
   ]
 }

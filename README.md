@@ -11,16 +11,23 @@ Players pick a number between 1 and 100. Each guess costs 1 token. When the roun
 3. The player with the closest guess wins the pot. Equal distance → earliest timestamp wins.
 4. If fewer than `MIN_PLAYERS` have guessed when the timer expires, the round extends.
 
-## Running locally
+## Development
+
+This app has no local mock/fake-data mode — it always talks to the real
+Usernode network through the centrally hosted bridge and the live username
+system. Develop and review against a **staging** build (every PR spins up a
+staging container, seeded with demo rounds and usernames), or run the server
+with `USERNODE_ENV=staging` pointed at a reachable node via `NODE_RPC_URL`.
 
 ```bash
 cp .env.example .env
-# Fill in APP_PUBKEY and APP_SECRET_KEY (or leave blank for mock mode)
 npm install
-node server.js --local-dev
+# Staging-style boot: seeds demo data, uses the real bridge for chain access.
+USERNODE_ENV=staging DATABASE_URL=... NODE_RPC_URL=... node server.js
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000`. Bridge-touching paths (`getNodeAddress`,
+`sendTransaction`, chain discovery) require the platform to be reachable.
 
 ## Production
 
