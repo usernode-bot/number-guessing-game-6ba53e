@@ -1025,6 +1025,34 @@ function getMyGuesses(round) {
   return round.guesses.filter((g) => g.from === myAddress);
 }
 
+// Optimistically insert a just-confirmed guess into the active round so it
+// renders the instant the wallet confirms, without waiting for the server
+// round-trip. The authoritative list arrives on the next refreshState(), which
+// replaces gameState wholesale — so this is purely a stop-gap for the brief
+// window before that completes. Dedupe by round.id + guess + player so a
+// background poll that already captured the tx can't double-count it, and bump
+// the local guess count (via the guesses array) so "guesses remaining" stays
+// correct on multi-guess rounds until reconciliation.
+function applyOptimisticGuess(roundId, guess) {
+  if (!myAddress || !gameState || !gameState.tracks) return;
+  const td = gameState.tracks[selectedTrack];
+  const round = td && td.currentRound;
+  // Re-read live state: the player may have switched tracks or the round may
+  // have rolled while the bridge popup was open. Only patch the exact round we
+  // sent into; otherwise rely on the single refreshState() that follows.
+  if (!round || round.id !== roundId || round.endedAt) return;
+  if (!Array.isArray(round.guesses)) round.guesses = [];
+  const alreadyShown = round.guesses.some((g) => g && g.from === myAddress && g.guess === guess);
+  if (alreadyShown) return;
+  const wasParticipant = round.guesses.some((g) => g && g.from === myAddress);
+  round.guesses.push({ from: myAddress, guess: guess });
+  // Each guess costs 1 token: bump the local pot, and participants only on the
+  // player's first entry this round. refreshState() overwrites both moments later.
+  if (typeof round.pot === 'number') round.pot += 1;
+  if (!wasParticipant && typeof round.participants === 'number') round.participants += 1;
+  render();
+}
+
 function getMyBestGuess(round, myGuesses) {
   if (!myGuesses || !myGuesses.length) return null;
   const secret = round && round.secret != null ? round.secret : null;
@@ -1082,7 +1110,7 @@ async function placeGuess() {
   clearErrors();
   console.log('[placeGuess] opening bridge approval for guess', { round: round.id, guess, to: appPubkey });
   try {
-    await window.sendTransaction(appPubkey, 1, memoStr, {
+    const result = await window.sendTransaction(appPubkey, 1, memoStr, {
       ...TX_SEND_OPTS,
       serverCacheUrl: '/__usernode/cache/' + appPubkey,
       confirmTitle: 'Lock in your guess',
@@ -1091,7 +1119,21 @@ async function placeGuess() {
         : 'Guess #' + guess + ' — 1 token entry fee. This cannot be changed.',
     });
     setSending(false);
-    fastPollEnd = Date.now() + FAST_POLL_DURATION;
+
+    // The hosted bridge waits for on-chain inclusion via /waitForTx and hands
+    // back the confirmed transaction. Read it defensively — the resolved shape
+    // is owned by the bridge and may carry no tx on its "queued" path. When we
+    // do have a confirmation, optimistically drop the guess into the active
+    // round so it shows instantly instead of waiting for the next poll to
+    // rediscover what we already know landed.
+    const confirmedTx = (result && typeof result === 'object' && result.tx &&
+      typeof result.tx === 'object') ? result.tx : null;
+    if (confirmedTx) applyOptimisticGuess(round.id, guess);
+
+    // Exactly one authoritative refresh to reconcile pot / participants /
+    // leaderboard. No 30s fast-poll burst: the bridge confirmation already
+    // told us the tx is in (and the same cache feeds /__numguess/state), so a
+    // single read is enough. The round-end fast-poll burst stays elsewhere.
     await refreshState();
   } catch (e) {
     setSending(false);
