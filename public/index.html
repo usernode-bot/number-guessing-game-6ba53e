@@ -59,7 +59,7 @@
 
   <title>Number Guessing Game</title>
 
-  <script src="/usernode-bridge.js"></script>
+  <script src="https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js"></script>
   <script src="/usernode-usernames.js"></script>
   <script src="/usernode-loading.js"></script>
 
@@ -798,6 +798,24 @@ function clearErrors() {
   document.getElementById('error-area').innerHTML = '';
 }
 
+// Show a clear "session expired" prompt when a gated request is rejected for
+// auth reasons. Returns true if the response was an auth-rejection (so callers
+// can stop and skip their generic error path).
+async function showAuthErrorIf401(resp) {
+  if (!resp || resp.status !== 401) return false;
+  let reason = 'invalid';
+  try {
+    const data = await resp.clone().json();
+    if (data && data.reason) reason = data.reason;
+  } catch {}
+  if (reason === 'missing') {
+    showError('You appear to be signed out — reopen the app from Usernode to continue.');
+  } else {
+    showError('Your session expired — reopen the app from Usernode to continue.');
+  }
+  return true;
+}
+
 function escapeHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -1132,6 +1150,7 @@ async function saveMode() {
       },
       body: JSON.stringify({ track: selectedTrack, difficulty }),
     });
+    if (await showAuthErrorIf401(resp)) { closeModePicker(); return; }
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     closeModePicker();
     await refreshState();
