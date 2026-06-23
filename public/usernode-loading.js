@@ -156,13 +156,13 @@
     var ui = null;
     var lastSnapshotJson = '';
 
-    var mockCheck = (window.usernode && typeof window.usernode.isMockEnabled === 'function')
-      ? Promise.resolve(window.usernode.isMockEnabled())
-      : Promise.resolve(false);
-
-    mockCheck.catch(function () { return false; }).then(function (isMock) {
-      if (isMock) return; // no overlay in mock mode
-
+    // LOCAL DIVERGENCE from the vendored usernode-dapp-starter copy: upstream
+    // gates the overlay behind window.usernode.isMockEnabled() and skips it in
+    // mock mode. This app runs exclusively in live Usernode DApps mode (no mock
+    // layer — see the /__mock/enabled route in server.js), so that branch is
+    // dead weight here and is removed; we always run the overlay/poll path.
+    // If this file is ever re-vendored, drop the isMockEnabled branch again.
+    {
       function ensureOverlayMounted() {
         if (ui) return;
         injectStyle();
@@ -233,7 +233,7 @@
         ensureOverlayMounted();
         pollTimer = setInterval(tick, pollIntervalMs);
       });
-    });
+    }
   }
 
   window.UsernodeLoading = { init: init };

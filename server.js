@@ -53,7 +53,6 @@ const PUBLIC_PREFIXES = [
   EXPLORER_PROXY_PREFIX,
   '/__usernode/',
   '/__usernames/',
-  '/__mock/',
   '/usernode-loading.js',
   '/usernode-usernames.js',
 ];
@@ -819,10 +818,28 @@ app.post('/__numguess/admin/start', async (req, res) => {
   }
 });
 
-// Mock-enabled probe — the hosted bridge probes this to decide mock mode.
-// This app has no mock layer: always answer false so the bridge stays on the
-// real network path (and so the probe doesn't fall through to the 401 catch-all).
-app.get('/__mock/enabled', (_req, res) => res.json({ enabled: false }));
+// Mock-enabled probe — the hosted bridge probes this on startup to decide
+// whether to route sendTransaction through a local mock layer. This app has
+// no mock layer; it runs exclusively in live Usernode DApps mode.
+//
+// CRITICAL bridge contract: the bridge keys its decision off the HTTP STATUS
+// only (it does `_mockEnabledResult = resp.ok` and ignores the body). A 2xx —
+// even one whose body says `{enabled:false}` — tells the bridge mock mode is
+// ON, so it routes every guess to the nonexistent `/__mock/sendTransaction`
+// and the send fails with "Mock API not enabled". We therefore answer with a
+// non-2xx status so `isMockEnabled()` resolves false and sendTransaction stays
+// on the real network path (native wallet in-app, QR on desktop).
+//
+// This explicit handler must also stay rather than letting the request fall
+// through to the `app.get('*')` catch-all below, which would serve index.html
+// with a 200 to authenticated probes and re-enable mock mode. 404 = "this mock
+// endpoint does not exist here."
+//
+// NOTE: the resulting `GET /__mock/enabled 404` line in the browser console is
+// EXPECTED and produced by the hosted bridge's own probe fetch — not app code,
+// and not suppressible from here. Do NOT "fix" it by returning 2xx or deleting
+// this route; either would re-enable mock mode and break Place Guess.
+app.get('/__mock/enabled', (_req, res) => res.status(404).json({ enabled: false }));
 
 // Favicon — serve as SVG so the browser stops logging 401s for this automatic request
 const FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎯</text></svg>';
