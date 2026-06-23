@@ -1019,13 +1019,13 @@ async function placeGuess() {
   if (!appPubkey) { showError('App not ready — please wait.'); return; }
   if (!myAddress) { showError('Wallet not connected.'); return; }
 
-  const guess = parseInt(document.getElementById('guess-slider').value, 10);
-  const roundRange = (round && round.range) ? round.range : 100;
-  if (guess < 1 || guess > roundRange) { showError('Guess must be between 1 and ' + roundRange + '.'); return; }
-
   const round = getActiveRound();
   if (!round) { showError('No active round.'); return; }
   if (round.endedAt) { showError('This round has ended.'); return; }
+
+  const guess = parseInt(document.getElementById('guess-slider').value, 10);
+  const roundRange = (round && round.range) ? round.range : 100;
+  if (guess < 1 || guess > roundRange) { showError('Guess must be between 1 and ' + roundRange + '.'); return; }
 
   const maxGuesses = round.maxGuessesPerPlayer || 1;
   const myGuesses = getMyGuesses(round);
