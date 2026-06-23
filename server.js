@@ -227,10 +227,14 @@ function injectStagingSeeds() {
     { id: 'staging-r7-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 7, guess: 28 }), timestamp_ms: now - 6 * hour + 1200000 },
     { id: 'staging-r7-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 7, secret: 33, winner: p2, winner_guess: 34, pot: 3, participants: 3 }), timestamp_ms: now - 5 * hour },
 
-    // Round 8 — 1h — active (started 15min ago, expires in ~45min)
-    { id: 'staging-r8-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 8, seed_hash: activeHashes.r8, active_duration_ms: 3600000, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1h' }), timestamp_ms: now - 15 * 60000 },
-    { id: 'staging-r8-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 8, guess: 50 }), timestamp_ms: now - 10 * 60000 },
-    { id: 'staging-r8-g2', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 8, guess: 75 }), timestamp_ms: now - 8 * 60000 },
+    // Round 8 — 1h — seeded as ENDED with no active successor, so the 1h track has
+    // no current round on boot. Staging then visibly auto-starts a fresh 1h round
+    // (demonstrating the production auto-start fix). The other three tracks keep
+    // their seeded active rounds. No-op outside staging.
+    { id: 'staging-r8-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 8, seed_hash: activeHashes.r8, active_duration_ms: 3600000, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1h' }), timestamp_ms: now - 90 * 60000 },
+    { id: 'staging-r8-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 8, guess: 50 }), timestamp_ms: now - 85 * 60000 },
+    { id: 'staging-r8-g2', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 8, guess: 75 }), timestamp_ms: now - 83 * 60000 },
+    { id: 'staging-r8-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 8, secret: 50, winner: p1, winner_guess: 50, pot: 2, participants: 2 }), timestamp_ms: now - 30 * 60000 },
 
     // ---- 1W TRACK ----
     // Round 6 — 1w — active (started 30min ago, expires in ~6d 23.5h)
@@ -509,12 +513,31 @@ async function walletSend(to, amount, memo) {
 
 async function configureSigner() {
   if (!APP_SECRET_KEY) return;
-  await fetch(`${NODE_RPC_URL}/wallet/signer`, {
+  const resp = await fetch(`${NODE_RPC_URL}/wallet/signer`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ secretKey: APP_SECRET_KEY }),
     signal: AbortSignal.timeout(10000),
   });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`wallet/signer ${resp.status}: ${text}`);
+  }
+}
+
+// Configure the wallet signer at most once per successful call. The wallet
+// process keeps the signer in memory, so a single successful configure covers
+// every later send — but if the call fails we leave the flag false so the next
+// send retries it (this also self-heals after a node restart clears the signer).
+// Without this, the very first on-chain start_round send ran with no signer and
+// failed, and because that send preceded the local state injection it stopped
+// rounds from ever auto-starting in production.
+let signerConfigured = false;
+async function ensureSignerConfigured() {
+  if (!APP_SECRET_KEY) return; // staging/dev: no on-chain sends, nothing to configure
+  if (signerConfigured) return;
+  await configureSigner();
+  signerConfigured = true;
 }
 
 async function sendWithRetry(to, amount, memo, retries) {
@@ -553,7 +576,7 @@ async function concludeRound(round, track) {
     console.log(`[payout:${track}] Round ${round.id}: secret=${secret}, winner=${winner}, pot=${pot}`);
 
     if (APP_SECRET_KEY) {
-      await configureSigner();
+      await ensureSignerConfigured();
 
       // 1. Send payout to winner
       const payoutMemo = { app: 'numguess', type: 'payout', round: round.id, winner };
@@ -590,9 +613,15 @@ async function postEndRound(round, secret, winner, winnerGuess, pot, participant
     participants,
   };
   if (APP_SECRET_KEY) {
-    await sendWithRetry(APP_PUBKEY, 0, memo, 3);
+    try {
+      await ensureSignerConfigured();
+      await sendWithRetry(APP_PUBKEY, 0, memo, 3);
+    } catch (e) {
+      console.error('[payout] on-chain end_round post failed (continuing with local state):', e.message);
+    }
   }
-  // Always inject locally so state updates immediately (only real path in staging)
+  // Always inject locally so state advances even if the on-chain post failed;
+  // the real tx dedups by round id when it later backfills. (Only real path in staging.)
   game.processTransaction({
     id: `local-end-${round.id}-${Date.now()}`,
     to: APP_PUBKEY,
@@ -634,9 +663,15 @@ async function postStartRound(track) {
   };
 
   if (APP_SECRET_KEY) {
-    await sendWithRetry(APP_PUBKEY, 0, memo, 3);
+    try {
+      await ensureSignerConfigured();
+      await sendWithRetry(APP_PUBKEY, 0, memo, 3);
+    } catch (e) {
+      console.error('[round] on-chain start_round post failed (continuing with local state):', e.message);
+    }
   }
-  // Always inject locally (only real path in staging)
+  // Always inject locally so state advances even if the on-chain post failed;
+  // the real tx dedups by round id when it later backfills. (Only real path in staging.)
   game.processTransaction({
     id: `local-start-${roundId}-${Date.now()}`,
     to: APP_PUBKEY,
@@ -840,6 +875,13 @@ async function start() {
 
   // After stream backfill, ensure all 4 tracks have an active round
   setTimeout(async () => {
+    // Configure the wallet signer up front so the first start_round send below
+    // has a signer (the failure that previously blocked auto-start). Best-effort:
+    // a failure here just retries lazily on the next send via ensureSignerConfigured.
+    if (APP_SECRET_KEY) {
+      try { await ensureSignerConfigured(); }
+      catch (e) { console.error('[boot] signer configure failed (will retry on next send):', e.message); }
+    }
     for (const track of TRACKS) {
       const current = game.getCurrentRoundForTrack(track);
       if (!current) {
