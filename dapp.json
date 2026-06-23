@@ -102,6 +102,16 @@
       "name": "Usernames cache serves seeded staging name",
       "path": "/__usernames/state",
       "expectText": "alice_s"
+    },
+    {
+      "name": "Sign-in gate markup is present",
+      "path": "/",
+      "expectSelector": "#signin-gate"
+    },
+    {
+      "name": "Welcome greeting element is present",
+      "path": "/",
+      "expectSelector": "#welcome-greeting"
     }
   ]
 }
