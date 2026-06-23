@@ -2,6 +2,12 @@
   "name": "Number Guessing Game",
   "secrets": [
     {
+      "key": "APP_PUBKEY",
+      "description": "Public on-chain address of the game wallet (utpk1... pubkey). Incoming guesses are sent to it and payouts originate from it; paired with APP_SECRET_KEY. Generate a keypair with usernode-dapp-starter's scripts/generate-keypair.js. Public identifier (already exposed via the game state endpoint), so not private.",
+      "required": false,
+      "default": "utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20yx79"
+    },
+    {
       "key": "APP_SECRET_KEY",
       "description": "Secret key for the game wallet (paired with the hardcoded APP_PUBKEY), used to sign server-side round-lifecycle and payout transactions on the real testnet. Required in production; staging resolves to an empty key and skips real payouts.",
       "required": true,
