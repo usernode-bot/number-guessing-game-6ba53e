@@ -33,6 +33,13 @@ shared understanding of what this app is for)_
 
 ## App-specific conventions
 
+- **All state is on-chain — this app provisions no database.** Rounds,
+  guesses, results, scores/leaderboard, and per-track win streaks are
+  all derived from Usernode transactions to/from `APP_PUBKEY`; win
+  streaks are computed on read in `game-logic.js` (`getMyStreaks` /
+  `getTrackStreaks`). `DATABASE_URL` is unused — don't reintroduce
+  `pg` or a Postgres table; derive new state from chain data instead.
+
 _(optional — e.g. "all currency values stored as integer cents, not
 floats"; "the `posts` table is append-only"; "avoid adding new
 dependencies"; etc.)_
