@@ -820,9 +820,17 @@ app.post('/__numguess/admin/start', async (req, res) => {
 });
 
 // Mock-enabled probe — the hosted bridge probes this to decide mock mode.
-// This app has no mock layer: always answer false so the bridge stays on the
-// real network path (and so the probe doesn't fall through to the 401 catch-all).
-app.get('/__mock/enabled', (_req, res) => res.json({ enabled: false }));
+// CRITICAL: the bridge keys off the HTTP STATUS only (it does `_mockEnabledResult
+// = resp.ok` and ignores the body). A 2xx — even one whose body says
+// `{enabled:false}` — tells the bridge mock mode is ON, so it routes every
+// sendTransaction to the nonexistent `/__mock/sendTransaction` and the guess
+// fails with "Mock API not enabled". This app has no mock layer, so the probe
+// MUST answer with a non-2xx status to keep the bridge on the real network path
+// (native wallet in-app, QR on desktop). We must also keep this explicit handler
+// rather than letting the request fall through to the `app.get('*')` catch-all,
+// which would serve index.html with a 200 to authenticated users and re-enable
+// mock mode. 404 = "this mock endpoint does not exist here".
+app.get('/__mock/enabled', (_req, res) => res.status(404).json({ enabled: false }));
 
 // Favicon — serve as SVG so the browser stops logging 401s for this automatic request
 const FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🎯</text></svg>';
