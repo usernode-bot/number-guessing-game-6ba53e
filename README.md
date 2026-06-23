@@ -2,7 +2,7 @@
 
 A fully on-chain number-guessing game on [Usernode Social Vibecoding](https://social-vibecoding.usernodelabs.org).
 
-Players pick a number between 1 and 100. Each guess costs 1 token. When the round ends, the closest guess wins the entire pot. Ties go to the earliest submission. All state is reconstructed from on-chain memo transactions — no server database required.
+Players pick a number between 1 and 100. Each guess costs 1 token. When the round ends, the closest guess wins the entire pot. Ties go to the earliest submission. Live game state (rounds, guesses, results, leaderboard, win streaks) is reconstructed from on-chain memo transactions. A single Postgres table, `game_results`, persists a durable per-user history of finished rounds for the **My Games** tab — see "Per-user history" below.
 
 ## How it works
 
@@ -28,6 +28,22 @@ USERNODE_ENV=staging DATABASE_URL=... NODE_RPC_URL=... node server.js
 
 Open `http://localhost:3000`. Bridge-touching paths (`getNodeAddress`,
 `sendTransaction`, chain discovery) require the platform to be reachable.
+
+## Per-user history
+
+Most state is on-chain, but each authenticated player's finished rounds are
+also persisted to a single Postgres table, `game_results`, so the **My Games**
+tab can show a durable personal history (guess count, win/outcome, best
+guess/distance, pot, timestamp) keyed to the platform user — even after a round
+ages out of the live on-chain view.
+
+- Schema is applied idempotently on boot (`lib/db.js` → `initSchema()`), using
+  the platform-injected `DATABASE_URL`.
+- Rows are written **lazily** when a signed-in player reads `GET /api/my-history`
+  (an authenticated, `/api/`-gated endpoint); there is no separate write path.
+- The table is **public** — every field is already public on-chain.
+- If `DATABASE_URL` is unset/unreachable, the endpoint degrades to returning
+  freshly-derived (unsaved) results instead of failing.
 
 ## Production
 

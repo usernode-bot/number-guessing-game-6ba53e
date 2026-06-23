@@ -15,6 +15,7 @@ const {
   EXPLORER_PROXY_PREFIX,
 } = require('./lib/dapp-server');
 const { createGame, DIFFICULTIES } = require('./game-logic');
+const db = require('./lib/db');
 
 loadEnvFile();
 
@@ -43,6 +44,88 @@ const pendingDifficulty = { '1h': 'medium', '6h': 'medium', '1d': 'medium', '1w'
 
 // Per-track payout guards
 const inFlightPayout = { '1h': false, '6h': false, '1d': false, '1w': false };
+
+// ---------------------------------------------------------------------------
+// Per-user game history (Postgres-backed)
+// ---------------------------------------------------------------------------
+//
+// Live gameplay stays on-chain; `game_results` is a durable per-user projection
+// of finished rounds, recorded lazily when a signed-in player reads their
+// history (see GET /api/my-history). One-shot guard so a missing/unreachable DB
+// logs once instead of on every request.
+let dbWarned = false;
+
+// Staging demo identity + rows for the "My Games" tab. A real staging reviewer
+// signs in as themselves, whose wallet never matches the seeded on-chain
+// players, so without this their personal history would always be empty. These
+// rows are obviously fake (fixed `staging-demo-user`, "alice_s" display name)
+// and are surfaced read-only behind `IS_STAGING && ?demo=1`. No-op in prod.
+const STAGING_DEMO_USER = { id: 'staging-demo-user', username: 'alice_s', usernode_pubkey: null };
+const STAGING_DEMO_RESULTS = (() => {
+  const now = Date.now();
+  const hour = 3600000;
+  const day = 86400000;
+  return [
+    { round_id: 62, track: '1d', difficulty: 'hard',   num_guesses: 10, won: true,  outcome: 'won',  best_guess: 250, best_distance: 0, secret: 250, pot: 10, ended_at: now - 2 * day },
+    { round_id: 50, track: '1d', difficulty: 'easy',   num_guesses: 1,  won: true,  outcome: 'won',  best_guess: 5,   best_distance: 0, secret: 5,   pot: 3,  ended_at: now - 1 * day },
+    { round_id: 8,  track: '1h', difficulty: 'medium', num_guesses: 1,  won: true,  outcome: 'won',  best_guess: 50,  best_distance: 0, secret: 50,  pot: 2,  ended_at: now - 6 * hour },
+    { round_id: 23, track: '1w', difficulty: 'medium', num_guesses: 4,  won: false, outcome: 'lost', best_guess: 47,  best_distance: 2, secret: 45,  pot: 0,  ended_at: now - 3 * day },
+    { round_id: 5,  track: '1h', difficulty: 'medium', num_guesses: 3,  won: false, outcome: 'lost', best_guess: 60,  best_distance: 1, secret: 61,  pot: 0,  ended_at: now - 12 * hour },
+    { round_id: 12, track: '6h', difficulty: 'easy',   num_guesses: 2,  won: false, outcome: 'lost', best_guess: 8,   best_distance: 2, secret: 6,   pot: 0,  ended_at: now - 4 * hour },
+  ];
+})();
+
+// Derive a single player's finished-round results from the live on-chain state.
+// Mirrors the closest-to-secret logic used by findWinner / renderHistory.
+function collectUserResults(pubkey) {
+  if (!pubkey) return [];
+  const out = [];
+  for (const [, r] of game.rounds) {
+    if (!r.endedAt) continue;
+    const mine = r.guesses.filter((g) => g.from === pubkey);
+    if (!mine.length) continue;
+
+    const secret = r.secret != null
+      ? r.secret
+      : (r.seedHash ? game.computeSecret(r.seedHash, r.range) : null);
+
+    let bestGuess = mine[0].guess;
+    let bestDist = null;
+    if (secret != null) {
+      for (const g of mine) {
+        const d = Math.abs(g.guess - secret);
+        if (bestDist === null || d < bestDist) { bestDist = d; bestGuess = g.guess; }
+      }
+    }
+
+    const won = r.winner === pubkey;
+    const outcome = won ? 'won' : (r.winner ? 'lost' : 'no_winner');
+    const numGuesses = r.rawGuessCounts ? (r.rawGuessCounts[pubkey] || mine.length) : mine.length;
+
+    out.push({
+      round_id: r.id,
+      track: r.durationTrack || null,
+      difficulty: r.difficulty || 'medium',
+      num_guesses: numGuesses,
+      won,
+      outcome,
+      best_guess: bestGuess,
+      best_distance: bestDist,
+      secret,
+      pot: won ? (r.pot != null ? r.pot : 0) : 0,
+      ended_at: r.endedAt || null,
+    });
+  }
+  out.sort((a, b) => (b.ended_at || 0) - (a.ended_at || 0) || b.round_id - a.round_id);
+  return out;
+}
+
+function computeHistoryStats(results) {
+  const played = results.length;
+  const wins = results.filter((r) => r.won).length;
+  const winRate = played ? Math.round((wins / played) * 100) : 0;
+  return { played, wins, winRate };
+}
 
 // ---------------------------------------------------------------------------
 // Auth middleware
@@ -788,6 +871,47 @@ app.get('/__numguess/state', async (req, res) => {
   res.json(state);
 });
 
+// Personal game history — the signed-in player's finished rounds. Under /api/
+// so the deny-by-default middleware forces authentication (401 without a valid
+// token); intentionally NOT added to PUBLIC_API_PATHS.
+app.get('/api/my-history', async (req, res) => {
+  // Staging-only, read-only demo injection so a reviewer (whose own wallet
+  // matches no seeded round) still sees a populated tab. Never persists; no-op
+  // in production.
+  if (IS_STAGING && req.query.demo === '1') {
+    return res.json({
+      results: STAGING_DEMO_RESULTS,
+      stats: computeHistoryStats(STAGING_DEMO_RESULTS),
+      demo: true,
+    });
+  }
+
+  const pubkey = req.user && req.user.usernode_pubkey;
+  if (!pubkey) {
+    // Signed in but no linked wallet → no on-chain guesses to match.
+    return res.json({ results: [], stats: { played: 0, wins: 0, winRate: 0 } });
+  }
+
+  const derived = collectUserResults(pubkey);
+  let results = derived;
+
+  if (db.isEnabled()) {
+    try {
+      await db.upsertResults(req.user, derived);
+      const persisted = await db.getResultsForUser(req.user.id);
+      if (persisted) results = persisted;
+    } catch (e) {
+      // Degrade to freshly-derived (unsaved) results rather than 500-ing.
+      if (!dbWarned) {
+        console.error('[my-history] DB unavailable, serving derived results:', e.message);
+        dbWarned = true;
+      }
+    }
+  }
+
+  res.json({ results, stats: computeHistoryStats(results) });
+});
+
 const VALID_TRACKS = new Set(['1h', '6h', '1d', '1w']);
 
 // Admin: set difficulty for a specific track's next round
@@ -893,10 +1017,24 @@ async function start() {
     }
   }
 
-  // No database: all state (rounds, guesses, results, scores, win streaks) is
-  // derived from on-chain transactions. Staging seeds are injected on-chain.
+  // Live gameplay (rounds, guesses, scores, win streaks) is derived from
+  // on-chain transactions. Postgres holds only the durable per-user game
+  // history projection; apply its schema idempotently before serving.
+  try {
+    await db.initSchema();
+  } catch (e) {
+    console.error('[boot] game_results schema init failed (history persistence degraded):', e.message);
+  }
+
   if (IS_STAGING) {
     injectStagingSeeds();
+    // Seed the demo player's saved history so the My Games tab is populated in
+    // staging review. Idempotent; serves the same rows the ?demo=1 path returns.
+    try {
+      await db.upsertResults(STAGING_DEMO_USER, STAGING_DEMO_RESULTS);
+    } catch (e) {
+      console.warn('[staging] demo game_results seed skipped:', e.message);
+    }
   }
 
   await numguessCache.start();

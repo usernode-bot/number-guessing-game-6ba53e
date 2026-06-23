@@ -33,12 +33,24 @@ shared understanding of what this app is for)_
 
 ## App-specific conventions
 
-- **All state is on-chain — this app provisions no database.** Rounds,
-  guesses, results, scores/leaderboard, and per-track win streaks are
-  all derived from Usernode transactions to/from `APP_PUBKEY`; win
-  streaks are computed on read in `game-logic.js` (`getMyStreaks` /
-  `getTrackStreaks`). `DATABASE_URL` is unused — don't reintroduce
-  `pg` or a Postgres table; derive new state from chain data instead.
+- **Live gameplay is on-chain; per-user history is in Postgres.**
+  Rounds, guesses, results, scores/leaderboard, and per-track win
+  streaks are all derived from Usernode transactions to/from
+  `APP_PUBKEY`; win streaks are computed on read in `game-logic.js`
+  (`getMyStreaks` / `getTrackStreaks`). The chain remains the source of
+  truth for live state — derive new gameplay state from chain data, not
+  a table.
+- **The one database table is `game_results`** (see `lib/db.js`): a
+  durable, per-user projection of each authenticated player's finished
+  rounds (guess count, win/outcome, best guess/distance, pot, timestamp),
+  keyed to `req.user`. It's written lazily when a signed-in player reads
+  their history via `GET /api/my-history`, and read back for the "My
+  Games" tab. The table is **public** (every field is already public
+  on-chain) and the schema is applied idempotently on boot via
+  `db.initSchema()`. `DATABASE_URL` is platform-injected; if it's absent
+  the history endpoint degrades to freshly-derived (unsaved) results
+  rather than failing. Keep deriving *gameplay* state from the chain —
+  only durable per-user records belong in `game_results`.
 
 _(optional — e.g. "all currency values stored as integer cents, not
 floats"; "the `posts` table is append-only"; "avoid adding new
