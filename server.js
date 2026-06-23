@@ -56,7 +56,6 @@ const PUBLIC_PREFIXES = [
   '/__usernode/',
   '/__usernames/',
   '/__mock/',
-  '/usernode-bridge.js',
   '/usernode-loading.js',
   '/usernode-usernames.js',
 ];
@@ -65,13 +64,31 @@ app.use(express.json());
 
 app.use((req, res, next) => {
   const token = req.query.token || req.headers['x-usernode-token'];
-  if (token && JWT_SECRET) {
-    try { req.user = jwt.verify(token, JWT_SECRET); } catch {}
+  // Coarse reason the credential didn't resolve, consumed by the shell gate
+  // page and by gated 401 responses. Never logs the raw token.
+  //   'missing'  — no token supplied (likely opened outside Usernode)
+  //   'no_secret'— JWT_SECRET not configured on the server (misconfiguration)
+  //   'expired'  — token present but past its exp
+  //   'invalid'  — token present but signature/format rejected
+  if (!token) {
+    req.authError = 'missing';
+  } else if (!JWT_SECRET) {
+    req.authError = 'no_secret';
+    console.error('[auth] token present but JWT_SECRET is not configured — cannot verify sessions');
+  } else {
+    try {
+      req.user = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      req.authError = err && err.name === 'TokenExpiredError' ? 'expired' : 'invalid';
+      console.warn(`[auth] token verification failed: ${req.authError} (${err && err.name})`);
+    }
   }
   if (req.method !== 'GET' || req.path.startsWith('/api/')) {
     if (PUBLIC_API_PATHS.has(req.path)) return next();
     if (PUBLIC_PREFIXES.some((p) => req.path.startsWith(p))) return next();
-    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+    if (!req.user) {
+      return res.status(401).json({ error: 'Not authenticated', reason: req.authError || 'missing' });
+    }
   }
   next();
 });
@@ -761,22 +778,9 @@ async function checkTrack(track) {
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-// Bridge proxy — centrally hosted, never vendored
-app.get('/usernode-bridge.js', (_req, res) => {
-  const url = 'https://social-vibecoding.usernodelabs.org/usernode-bridge/v1/bridge.js';
-  fetch(url, { signal: AbortSignal.timeout(8000) })
-    .then((r) => {
-      if (!r.ok) throw new Error('upstream ' + r.status);
-      res.set('content-type', 'application/javascript');
-      res.set('cache-control', 'no-cache, must-revalidate');
-      return r.text();
-    })
-    .then((text) => res.send(text))
-    .catch((e) => {
-      console.error('[bridge proxy]', e.message);
-      res.status(502).send('// bridge unavailable\n');
-    });
-});
+// The bridge is loaded cross-origin directly from the canonical hosted copy
+// (see public/index.html). Per platform convention it is never proxied or
+// vendored per-app — fixes propagate fleet-wide on the next page load.
 
 // Serve static scripts
 app.get('/usernode-loading.js', (_req, res) => {
@@ -885,12 +889,21 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 // HTML shell — gated by JWT
 app.get('*', (req, res) => {
   if (!req.user) {
-    return res.status(401).send(`<!doctype html><meta charset=utf-8><title>Open in Usernode</title>
+    // Distinguish "never authenticated" from "session was rejected" so the
+    // gate page tells the truth instead of always implying a direct visit.
+    const rejected = req.authError === 'expired' || req.authError === 'invalid';
+    const title = rejected ? 'Session expired' : 'Open this app inside Usernode';
+    const heading = rejected ? 'Your session expired' : 'Open this app inside Usernode';
+    const body = rejected
+      ? 'Reopen the app from Usernode to continue — your sign-in needs to be refreshed.'
+      : "This page is served via the platform; direct visits aren't authenticated.";
+    const cta = rejected ? 'Reopen from Usernode' : 'Go to Usernode';
+    return res.status(401).send(`<!doctype html><meta charset=utf-8><title>${title}</title>
 <body style="font-family:system-ui;background:#09090b;color:#e4e4e7;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
   <div style="max-width:24rem;padding:2rem;text-align:center">
-    <h1 style="font-size:1.25rem;margin:0 0 0.5rem">Open this app inside Usernode</h1>
-    <p style="color:#a1a1aa;font-size:0.9rem;margin:0 0 1.25rem">This page is served via the platform; direct visits aren't authenticated.</p>
-    <a href="https://social-vibecoding.usernodelabs.org" style="display:inline-block;padding:0.5rem 1rem;background:#7c3aed;color:white;border-radius:0.5rem;text-decoration:none;font-size:0.9rem">Go to Usernode</a>
+    <h1 style="font-size:1.25rem;margin:0 0 0.5rem">${heading}</h1>
+    <p style="color:#a1a1aa;font-size:0.9rem;margin:0 0 1.25rem">${body}</p>
+    <a href="https://social-vibecoding.usernodelabs.org" style="display:inline-block;padding:0.5rem 1rem;background:#7c3aed;color:white;border-radius:0.5rem;text-decoration:none;font-size:0.9rem">${cta}</a>
   </div>
 </body>`);
   }
@@ -903,6 +916,19 @@ app.get('*', (req, res) => {
 // ---------------------------------------------------------------------------
 
 async function start() {
+  // Fail loud if the session-signing secret is missing. Without it the auth
+  // middleware can never set req.user, so every shell load hits the gate page
+  // and login is totally broken. In staging/build the secret is platform-
+  // injected and absent in PR previews, so only warn there; in production a
+  // missing secret is a hard misconfiguration.
+  if (!JWT_SECRET) {
+    if (IS_STAGING) {
+      console.warn('[boot] JWT_SECRET is not set — auth will reject all sessions. Expected in some staging/preview builds.');
+    } else {
+      console.error('[boot] FATAL: JWT_SECRET is not set in production — login is broken until it is configured. All sessions will be rejected.');
+    }
+  }
+
   // DB migrations
   if (pool) {
     try {
