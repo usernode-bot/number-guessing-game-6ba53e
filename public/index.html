@@ -273,6 +273,20 @@
     .btn:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 8px 28px var(--accent-glow); }
     .btn:active:not(:disabled) { transform: scale(.98); }
     .btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+    /* ---- Tx pending / confirmed button states ---- */
+    .btn-state-row { display: inline-flex; align-items: center; justify-content: center; gap: .55rem; }
+    .btn-spinner {
+      display: inline-block; width: 1.05em; height: 1.05em; flex: 0 0 auto;
+      border: 2px solid rgba(255,255,255,.45); border-top-color: #fff;
+      border-radius: 50%; animation: btn-spin .7s linear infinite;
+    }
+    @keyframes btn-spin { to { transform: rotate(360deg); } }
+    /* Confirmed: keep it disabled-looking but in the success palette, not greyed. */
+    .btn.is-confirmed, .btn.is-confirmed:disabled {
+      background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-soft-border);
+      opacity: 1; box-shadow: none; cursor: default;
+    }
+    .btn-check { display: inline-block; font-weight: 900; animation: badge-in .25s ease; }
     .btn-secondary {
       background: var(--bg-elev); color: var(--text); border: 1px solid var(--border);
       box-shadow: none;
@@ -764,6 +778,13 @@ let currentTab = 'game';
 let fastPollEnd = 0;
 let pollTimer = null;
 let countdownTimer = null;
+// Staging-only demo mode (activated by ?demo=1 when the server reports staging):
+// simulates the on-chain send with a fixed pending delay so the spinner →
+// confirmed lifecycle is observable without a live wallet / explorer round-trip.
+let wantDemo = false;
+let DEMO = false;
+const DEMO_HOLD_MS = 2500;
+const DEMO_ADDR = 'utpk1demoplayer0000000000000000000000000000000000000000demo01';
 const prevEndedAt = { '1h': null, '6h': null, '1d': null, '1w': null };
 let prevStreakValue = -1;
 let prevCountdownRemaining = Infinity;
@@ -870,22 +891,65 @@ function setSending(val) {
   if (btn) btn.disabled = val;
 }
 
+// ---- Reusable tx-button lifecycle: idle → pending → confirmed → idle ----
+// Drives a single <button class="btn"> through a spinner-while-pending state
+// and a brief success state once the on-chain tx is included, then restores
+// its idle label. `idleLabel` is the text to show when reset to idle.
+function setBtnState(btn, state, label) {
+  if (!btn) return;
+  if (state === 'pending') {
+    btn.disabled = true;
+    btn.classList.remove('is-confirmed');
+    btn.innerHTML = '<span class="btn-state-row"><span class="btn-spinner"></span>' +
+      escapeHtml(label || 'Confirming…') + '</span>';
+  } else if (state === 'confirmed') {
+    btn.disabled = true;
+    btn.classList.add('is-confirmed');
+    btn.innerHTML = '<span class="btn-state-row"><span class="btn-check">✓</span>' +
+      escapeHtml(label || 'Confirmed') + '</span>';
+  } else { // idle
+    btn.classList.remove('is-confirmed');
+    btn.disabled = false;
+    btn.textContent = label || '';
+  }
+}
+
+function demoHold() {
+  return new Promise((resolve) => setTimeout(resolve, DEMO_HOLD_MS));
+}
+
+// Activate demo mode once the server confirms we're in staging. Idempotent.
+function maybeActivateDemo() {
+  if (DEMO || !wantDemo || !gameState || !gameState.staging) return;
+  DEMO = true;
+  if (!loggedIn) {
+    attemptSignIn().then((ok) => {
+      if (ok) { applyAuthUI(); if (gameState) render(); }
+    });
+  }
+}
+
 // ---- Auth / login gate ----
 // "Logged in" == a Usernode wallet address resolved via the bridge. Placing a
 // guess is an on-chain tx that requires a connected wallet, so wallet presence
 // is the gate for play. Leaderboard/History stay viewable while logged out.
 async function attemptSignIn() {
   let addr = null;
-  if (typeof window.getNodeAddress !== 'function') {
-    lastSignInReason = 'Wallet bridge not ready — reload the app.';
-    console.warn('attemptSignIn:', lastSignInReason);
-    return false;
-  }
-  try {
-    addr = await window.getNodeAddress();
-  } catch (e) {
-    lastSignInReason = 'Open this app inside Usernode to connect your wallet.';
-    console.warn('getNodeAddress failed:', e && e.message ? e.message : e);
+  if (DEMO) {
+    // Demo mode: skip the bridge wallet lookup entirely, use a fake address.
+    addr = DEMO_ADDR;
+  } else {
+    if (typeof window.getNodeAddress !== 'function') {
+      lastSignInReason = 'Wallet bridge not ready — reload the app.';
+      console.warn('attemptSignIn:', lastSignInReason);
+      return false;
+    }
+    try {
+      addr = await window.getNodeAddress();
+    } catch (e) {
+      lastSignInReason = 'Open this app inside Usernode to connect your wallet.';
+      console.warn('getNodeAddress failed:', e && e.message ? e.message : e);
+    }
   }
   if (!addr) {
     if (!lastSignInReason) lastSignInReason = 'No Usernode wallet connected yet — open this app inside Usernode.';
@@ -900,7 +964,7 @@ async function attemptSignIn() {
   // Resolve the chosen display name; fall back to the default until it loads.
   myUsername = 'user_' + addr.slice(-6);
   try {
-    if (window.UsernodeUsernames) {
+    if (window.UsernodeUsernames && !DEMO) {
       await UsernodeUsernames.init();
       const name = UsernodeUsernames.getUsernameSync(addr);
       if (name) myUsername = name;
@@ -1146,37 +1210,50 @@ async function placeGuess() {
   const guessesLeft = maxGuesses - myGuesses.length;
   const isMultiGuess = maxGuesses > 1;
 
+  const guessBtn = document.getElementById('guess-btn');
   setSending(true);
   clearErrors();
+  // Keep `sending` true through the confirmed flash so the poll loop's
+  // updateGuessCard can't re-enable the button mid-lifecycle.
+  setBtnState(guessBtn, 'pending', 'Confirming…');
   console.log('[placeGuess] opening bridge approval for guess', { round: round.id, guess, to: appPubkey });
   try {
-    const result = await window.sendTransaction(appPubkey, 1, memoStr, {
-      ...TX_SEND_OPTS,
-      serverCacheUrl: '/__usernode/cache/' + appPubkey,
-      confirmTitle: 'Lock in your guess',
-      confirmSubtitle: isMultiGuess
-        ? 'Guess #' + guess + ' — 1 token. You have ' + guessesLeft + ' guess' + (guessesLeft !== 1 ? 'es' : '') + ' remaining (each costs 1 token).'
-        : 'Guess #' + guess + ' — 1 token entry fee. This cannot be changed.',
-    });
-    setSending(false);
-
-    // The hosted bridge waits for on-chain inclusion via /waitForTx and hands
-    // back the confirmed transaction. Read it defensively — the resolved shape
-    // is owned by the bridge and may carry no tx on its "queued" path. When we
-    // do have a confirmation, optimistically drop the guess into the active
-    // round so it shows instantly instead of waiting for the next poll to
-    // rediscover what we already know landed.
-    const confirmedTx = (result && typeof result === 'object' && result.tx &&
-      typeof result.tx === 'object') ? result.tx : null;
-    if (confirmedTx) applyOptimisticGuess(round.id, guess);
-
+    if (DEMO) {
+      await demoHold();
+    } else {
+      const result = await window.sendTransaction(appPubkey, 1, memoStr, {
+        ...TX_SEND_OPTS,
+        serverCacheUrl: '/__usernode/cache/' + appPubkey,
+        confirmTitle: 'Lock in your guess',
+        confirmSubtitle: isMultiGuess
+          ? 'Guess #' + guess + ' — 1 token. You have ' + guessesLeft + ' guess' + (guessesLeft !== 1 ? 'es' : '') + ' remaining (each costs 1 token).'
+          : 'Guess #' + guess + ' — 1 token entry fee. This cannot be changed.',
+      });
+      // The hosted bridge waits for on-chain inclusion via /waitForTx and hands
+      // back the confirmed transaction. Read it defensively — the resolved shape
+      // is owned by the bridge and may carry no tx on its "queued" path. When we
+      // do have a confirmation, optimistically drop the guess into the active
+      // round so it shows instantly instead of waiting for the next poll to
+      // rediscover what we already know landed.
+      const confirmedTx = (result && typeof result === 'object' && result.tx &&
+        typeof result.tx === 'object') ? result.tx : null;
+      if (confirmedTx) applyOptimisticGuess(round.id, guess);
+    }
+    // Tx is included — show the confirmed flash, then let normal render take over.
+    setBtnState(guessBtn, 'confirmed', 'Guess locked in');
     // Exactly one authoritative refresh to reconcile pot / participants /
     // leaderboard. No 30s fast-poll burst: the bridge confirmation already
     // told us the tx is in (and the same cache feeds /__numguess/state), so a
     // single read is enough. The round-end fast-poll burst stays elsewhere.
-    await refreshState();
+    if (!DEMO) await refreshState();
+    setTimeout(() => {
+      setSending(false);
+      setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
+      if (gameState) render();
+    }, 900);
   } catch (e) {
     setSending(false);
+    setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
     const msg = e && e.message ? e.message : String(e);
     const low = msg.toLowerCase();
     if (low.includes('timeout')) {
@@ -1214,24 +1291,31 @@ async function saveUsername() {
   if (!raw) { showError('Please enter a username.'); return; }
 
   const btn = document.getElementById('username-save-btn');
-  btn.disabled = true;
-  btn.textContent = 'Saving…';
+  setBtnState(btn, 'pending', 'Confirming…');
   try {
-    const saved = await window.UsernodeUsernames.setUsername(raw);
+    let saved;
+    if (DEMO) {
+      await demoHold();
+      saved = raw + (myAddress ? '_' + myAddress.slice(-6) : '');
+    } else {
+      saved = await window.UsernodeUsernames.setUsername(raw);
+    }
     myUsername = saved;
     document.getElementById('username-display').textContent = saved;
-    closeUsernameModal();
-    await UsernodeUsernames.refresh();
+    setBtnState(btn, 'confirmed', 'Saved');
+    if (!DEMO) await UsernodeUsernames.refresh();
+    setTimeout(() => {
+      setBtnState(btn, 'idle', 'Save username');
+      closeUsernameModal();
+    }, 900);
   } catch (e) {
+    setBtnState(btn, 'idle', 'Save username');
     const msg = e && e.message ? e.message : String(e);
     if (msg.toLowerCase().includes('timeout')) {
       showError('Username tx timed out — it may still confirm.');
     } else {
       showError('Failed to save username: ' + msg);
     }
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Save username';
   }
 }
 
@@ -1323,6 +1407,7 @@ async function refreshState() {
       }
     }
 
+    maybeActivateDemo();
     render();
     document.getElementById('reconnect-bar').classList.remove('show');
   } catch (e) {
@@ -1789,6 +1874,9 @@ async function init() {
   const params = new URLSearchParams(window.location.search);
   const token = params.get('token') || '';
   window._ngToken = token;
+  // Demo mode is requested via ?demo=1 but only honored once the server
+  // confirms USERNODE_ENV=staging (see maybeActivateDemo / refreshState).
+  wantDemo = params.get('demo') === '1';
 
   try {
     // No client-side chain bootstrap needed: the hosted bridge discovers the
