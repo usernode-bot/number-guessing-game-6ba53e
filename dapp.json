@@ -59,6 +59,11 @@
       "expectText": "\"1h\""
     },
     {
+      "name": "A round auto-starts (current round present)",
+      "path": "/__numguess/state",
+      "expectText": "\"currentRound\":{"
+    },
+    {
       "name": "State endpoint includes all four tracks",
       "path": "/__numguess/state",
       "expectText": "\"1w\""
