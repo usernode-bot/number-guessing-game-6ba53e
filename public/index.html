@@ -381,6 +381,29 @@
     .empty-state { text-align: center; padding: 3.5rem 1rem; color: var(--text-muted); }
     .empty-state .empty-icon { font-size: 2.75rem; margin-bottom: .85rem; opacity: .85; }
     .empty-state p { font-size: .9rem; }
+    /* ---- My Games ---- */
+    .mygames-summary {
+      display: flex; gap: .5rem; margin-bottom: .85rem;
+    }
+    .mygames-summary .mg-stat {
+      flex: 1; background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .7rem .5rem; text-align: center;
+    }
+    .mygames-summary .mg-stat strong { display: block; font-size: 1.15rem; font-weight: 800; color: var(--accent-light); }
+    .mygames-summary .mg-stat small { display: block; font-size: .68rem; color: var(--text-muted); margin-top: .15rem; text-transform: uppercase; letter-spacing: .03em; }
+    .mg-row {
+      display: flex; align-items: center; gap: .75rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .7rem .85rem; margin-bottom: .5rem;
+    }
+    .mg-row.is-winner { border-color: var(--accent); }
+    .mg-row .mg-main { flex: 1; min-width: 0; }
+    .mg-row .mg-round { font-weight: 800; font-size: .85rem; }
+    .mg-row .mg-meta { font-size: .72rem; color: var(--text-muted); margin-top: .15rem; }
+    .mg-row .mg-right { flex-shrink: 0; text-align: right; }
+    .mg-outcome { font-size: .76rem; font-weight: 700; }
+    .mg-outcome.win { color: var(--accent-light); }
+    .mg-outcome.loss { color: var(--text-muted); }
     /* ---- Bottom Nav ---- */
     .bottom-nav {
       position: fixed; bottom: 0; left: 0; right: 0;
@@ -654,6 +677,18 @@
     </div>
   </div>
 
+  <!-- My Games Panel -->
+  <div class="panel" id="panel-mygames">
+    <div class="section-header">My games</div>
+    <div class="mygames-summary" id="mygames-summary" style="display:none"></div>
+    <div id="mygames-list">
+      <div class="empty-state">
+        <div class="empty-icon">👤</div>
+        <p>Loading…</p>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <!-- Bottom Nav -->
@@ -669,6 +704,10 @@
   <button class="nav-btn" id="nav-history" onclick="switchTab('history')">
     <span class="nav-icon">📜</span>
     <span>History</span>
+  </button>
+  <button class="nav-btn" id="nav-mygames" onclick="switchTab('mygames')">
+    <span class="nav-icon">👤</span>
+    <span>My Games</span>
   </button>
 </nav>
 
@@ -755,10 +794,11 @@ function toggleTheme() {
 function switchTab(tab) {
   if (winAutoSwitchTimer) { clearTimeout(winAutoSwitchTimer); winAutoSwitchTimer = null; }
   currentTab = tab;
-  ['game','leaderboard','history'].forEach((t) => {
+  ['game','leaderboard','history','mygames'].forEach((t) => {
     document.getElementById('panel-' + t).classList.toggle('active', t === tab);
     document.getElementById('nav-' + t).classList.toggle('active', t === tab);
   });
+  if (tab === 'mygames') refreshMyGames();
 }
 
 // ---- Track selectors ----
@@ -1637,6 +1677,94 @@ function toggleHist(id) {
   if (tog) tog.textContent = open ? '▲' : '▼';
 }
 
+// ---- My Games (personal history) ----
+let myGamesData = null;
+
+async function refreshMyGames() {
+  const list = document.getElementById('mygames-list');
+  const summary = document.getElementById('mygames-summary');
+  if (!list) return;
+
+  // Not signed in → prompt to sign in, consistent with the rest of the app.
+  if (!loggedIn) {
+    if (summary) summary.style.display = 'none';
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔒</div><p>Sign in to see your game history.</p></div>';
+    return;
+  }
+
+  try {
+    const headers = window._ngToken ? { 'x-usernode-token': window._ngToken } : {};
+    // Forward ?demo=1 so a staging reviewer sees the seeded demo history.
+    const demo = new URLSearchParams(window.location.search).get('demo') === '1' ? '?demo=1' : '';
+    const res = await fetch('/api/my-history' + demo, { cache: 'no-store', headers });
+    if (res.status === 401) {
+      if (summary) summary.style.display = 'none';
+      list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔒</div><p>Sign in to see your game history.</p></div>';
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    myGamesData = await res.json();
+    renderMyGames();
+  } catch (e) {
+    if (summary) summary.style.display = 'none';
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Couldn’t load your games. Try again in a moment.</p></div>';
+  }
+}
+
+function renderMyGames() {
+  const list = document.getElementById('mygames-list');
+  const summary = document.getElementById('mygames-summary');
+  if (!list || !myGamesData) return;
+
+  const results = myGamesData.results || [];
+  const stats = myGamesData.stats || { played: 0, wins: 0, winRate: 0 };
+
+  if (!results.length) {
+    if (summary) summary.style.display = 'none';
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><p>No games yet — place a guess to get started.</p></div>';
+    return;
+  }
+
+  if (summary) {
+    summary.style.display = '';
+    summary.innerHTML =
+      '<div class="mg-stat"><strong>' + stats.played + '</strong><small>games</small></div>' +
+      '<div class="mg-stat"><strong>' + stats.wins + '</strong><small>wins</small></div>' +
+      '<div class="mg-stat"><strong>' + stats.winRate + '%</strong><small>win rate</small></div>';
+  }
+
+  const trackLabel = { '1h': '1H', '6h': '6H', '1d': '1D', '1w': '1W' };
+  list.innerHTML = results.map((r) => {
+    const date = r.ended_at ? new Date(r.ended_at).toLocaleDateString() : '';
+    const tl = trackLabel[r.track] || (r.track || '');
+    const diff = r.difficulty ? r.difficulty.charAt(0).toUpperCase() + r.difficulty.slice(1) : '';
+    const tags = [tl, diff].filter(Boolean).join(' · ');
+    const guesses = r.num_guesses === 1 ? '1 guess' : (r.num_guesses || 0) + ' guesses';
+
+    let outcomeHtml;
+    if (r.won) {
+      outcomeHtml = '<span class="mg-outcome win">🏆 Won · +' + (r.pot || 0) + ' tokens</span>';
+    } else {
+      let best = '';
+      if (r.best_guess != null) {
+        const distPart = r.best_distance != null
+          ? ' (' + (r.best_distance === 0 ? '🎯' : r.best_distance + ' away') + ')'
+          : '';
+        best = ' · your best: ' + r.best_guess + distPart;
+      }
+      outcomeHtml = '<span class="mg-outcome loss">Lost' + best + '</span>';
+    }
+
+    return '<div class="mg-row' + (r.won ? ' is-winner' : '') + '">' +
+      '<div class="mg-main">' +
+        '<div class="mg-round">Round ' + r.round_id + '</div>' +
+        '<div class="mg-meta">' + escapeHtml(tags) + (tags ? ' · ' : '') + guesses + (date ? ' · ' + date : '') + '</div>' +
+      '</div>' +
+      '<div class="mg-right">' + outcomeHtml + '</div>' +
+    '</div>';
+  }).join('');
+}
+
 // ---- Poll loop ----
 function scheduleNextPoll() {
   if (pollTimer) clearTimeout(pollTimer);
@@ -1649,6 +1777,7 @@ function scheduleNextPoll() {
       if (name && name !== myUsername) { myUsername = name; updateGreeting(); }
     }
     await refreshState();
+    if (currentTab === 'mygames') refreshMyGames();
     scheduleNextPoll();
   }, ms);
 }

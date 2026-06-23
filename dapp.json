@@ -123,6 +123,16 @@
       "name": "Welcome greeting element is present",
       "path": "/",
       "expectSelector": "#welcome-greeting"
+    },
+    {
+      "name": "My Games tab renders in the bottom nav",
+      "path": "/?demo=1",
+      "expectSelector": "#nav-mygames"
+    },
+    {
+      "name": "Personal history endpoint returns demo results",
+      "path": "/api/my-history?demo=1",
+      "expectText": "outcome"
     }
   ]
 }
