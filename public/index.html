@@ -395,6 +395,29 @@
     .empty-state { text-align: center; padding: 3.5rem 1rem; color: var(--text-muted); }
     .empty-state .empty-icon { font-size: 2.75rem; margin-bottom: .85rem; opacity: .85; }
     .empty-state p { font-size: .9rem; }
+    /* ---- My Games ---- */
+    .mygames-summary {
+      display: flex; gap: .5rem; margin-bottom: .85rem;
+    }
+    .mygames-summary .mg-stat {
+      flex: 1; background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .7rem .5rem; text-align: center;
+    }
+    .mygames-summary .mg-stat strong { display: block; font-size: 1.15rem; font-weight: 800; color: var(--accent-light); }
+    .mygames-summary .mg-stat small { display: block; font-size: .68rem; color: var(--text-muted); margin-top: .15rem; text-transform: uppercase; letter-spacing: .03em; }
+    .mg-row {
+      display: flex; align-items: center; gap: .75rem;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .7rem .85rem; margin-bottom: .5rem;
+    }
+    .mg-row.is-winner { border-color: var(--accent); }
+    .mg-row .mg-main { flex: 1; min-width: 0; }
+    .mg-row .mg-round { font-weight: 800; font-size: .85rem; }
+    .mg-row .mg-meta { font-size: .72rem; color: var(--text-muted); margin-top: .15rem; }
+    .mg-row .mg-right { flex-shrink: 0; text-align: right; }
+    .mg-outcome { font-size: .76rem; font-weight: 700; }
+    .mg-outcome.win { color: var(--accent-light); }
+    .mg-outcome.loss { color: var(--text-muted); }
     /* ---- Bottom Nav ---- */
     .bottom-nav {
       position: fixed; bottom: 0; left: 0; right: 0;
@@ -668,6 +691,18 @@
     </div>
   </div>
 
+  <!-- My Games Panel -->
+  <div class="panel" id="panel-mygames">
+    <div class="section-header">My games</div>
+    <div class="mygames-summary" id="mygames-summary" style="display:none"></div>
+    <div id="mygames-list">
+      <div class="empty-state">
+        <div class="empty-icon">👤</div>
+        <p>Loading…</p>
+      </div>
+    </div>
+  </div>
+
 </main>
 
 <!-- Bottom Nav -->
@@ -683,6 +718,10 @@
   <button class="nav-btn" id="nav-history" onclick="switchTab('history')">
     <span class="nav-icon">📜</span>
     <span>History</span>
+  </button>
+  <button class="nav-btn" id="nav-mygames" onclick="switchTab('mygames')">
+    <span class="nav-icon">👤</span>
+    <span>My Games</span>
   </button>
 </nav>
 
@@ -733,6 +772,8 @@ let myUsername = null;
 let loggedIn = false;
 let gameState = null;
 let sending = false;
+let sendStartedAt = 0;      // ms timestamp of the in-flight send, for stuck-send recovery
+let lastSignInReason = '';  // human-readable reason the last wallet connect attempt failed
 let currentTab = 'game';
 let fastPollEnd = 0;
 let pollTimer = null;
@@ -774,10 +815,11 @@ function toggleTheme() {
 function switchTab(tab) {
   if (winAutoSwitchTimer) { clearTimeout(winAutoSwitchTimer); winAutoSwitchTimer = null; }
   currentTab = tab;
-  ['game','leaderboard','history'].forEach((t) => {
+  ['game','leaderboard','history','mygames'].forEach((t) => {
     document.getElementById('panel-' + t).classList.toggle('active', t === tab);
     document.getElementById('nav-' + t).classList.toggle('active', t === tab);
   });
+  if (tab === 'mygames') refreshMyGames();
 }
 
 // ---- Track selectors ----
@@ -844,6 +886,7 @@ function escapeHtml(str) {
 // ---- Sending state ----
 function setSending(val) {
   sending = val;
+  if (val) sendStartedAt = Date.now();
   const btn = document.getElementById('guess-btn');
   if (btn) btn.disabled = val;
 }
@@ -896,13 +939,23 @@ async function attemptSignIn() {
     // Demo mode: skip the bridge wallet lookup entirely, use a fake address.
     addr = DEMO_ADDR;
   } else {
+    if (typeof window.getNodeAddress !== 'function') {
+      lastSignInReason = 'Wallet bridge not ready — reload the app.';
+      console.warn('attemptSignIn:', lastSignInReason);
+      return false;
+    }
     try {
       addr = await window.getNodeAddress();
     } catch (e) {
+      lastSignInReason = 'Open this app inside Usernode to connect your wallet.';
       console.warn('getNodeAddress failed:', e && e.message ? e.message : e);
     }
   }
-  if (!addr) return false;
+  if (!addr) {
+    if (!lastSignInReason) lastSignInReason = 'No Usernode wallet connected yet — open this app inside Usernode.';
+    return false;
+  }
+  lastSignInReason = '';
 
   myAddress = addr;
   myPubkey = addr;
@@ -941,6 +994,12 @@ function applyAuthUI() {
     gate.style.display = '';
     if (greeting) greeting.style.display = 'none';
     if (pill) pill.textContent = 'Sign in';
+    // Surface why the wallet didn't connect rather than leaving a dead-looking gate.
+    const guidance = document.getElementById('signin-guidance');
+    if (guidance && lastSignInReason) {
+      guidance.textContent = lastSignInReason;
+      guidance.style.display = '';
+    }
   }
 }
 
@@ -973,7 +1032,10 @@ async function doSignIn() {
     if (gameState) render();
   } else {
     btn.textContent = 'Try again';
-    if (guidance) guidance.style.display = '';
+    if (guidance) {
+      guidance.textContent = lastSignInReason || 'Open this app inside Usernode to connect your wallet.';
+      guidance.style.display = '';
+    }
   }
 }
 
@@ -1067,6 +1129,34 @@ function getMyGuesses(round) {
   return round.guesses.filter((g) => g.from === myAddress);
 }
 
+// Optimistically insert a just-confirmed guess into the active round so it
+// renders the instant the wallet confirms, without waiting for the server
+// round-trip. The authoritative list arrives on the next refreshState(), which
+// replaces gameState wholesale — so this is purely a stop-gap for the brief
+// window before that completes. Dedupe by round.id + guess + player so a
+// background poll that already captured the tx can't double-count it, and bump
+// the local guess count (via the guesses array) so "guesses remaining" stays
+// correct on multi-guess rounds until reconciliation.
+function applyOptimisticGuess(roundId, guess) {
+  if (!myAddress || !gameState || !gameState.tracks) return;
+  const td = gameState.tracks[selectedTrack];
+  const round = td && td.currentRound;
+  // Re-read live state: the player may have switched tracks or the round may
+  // have rolled while the bridge popup was open. Only patch the exact round we
+  // sent into; otherwise rely on the single refreshState() that follows.
+  if (!round || round.id !== roundId || round.endedAt) return;
+  if (!Array.isArray(round.guesses)) round.guesses = [];
+  const alreadyShown = round.guesses.some((g) => g && g.from === myAddress && g.guess === guess);
+  if (alreadyShown) return;
+  const wasParticipant = round.guesses.some((g) => g && g.from === myAddress);
+  round.guesses.push({ from: myAddress, guess: guess });
+  // Each guess costs 1 token: bump the local pot, and participants only on the
+  // player's first entry this round. refreshState() overwrites both moments later.
+  if (typeof round.pot === 'number') round.pot += 1;
+  if (!wasParticipant && typeof round.participants === 'number') round.participants += 1;
+  render();
+}
+
 function getMyBestGuess(round, myGuesses) {
   if (!myGuesses || !myGuesses.length) return null;
   const secret = round && round.secret != null ? round.secret : null;
@@ -1078,17 +1168,34 @@ function getMyBestGuess(round, myGuesses) {
 
 // ---- Guess action ----
 async function placeGuess() {
-  if (sending) return;
+  // Never silently swallow a tap. If a previous send is genuinely still in
+  // flight, say so; if it looks wedged (promise never settled past the tx
+  // timeout), recover instead of disabling the button forever.
+  if (sending) {
+    if (Date.now() - sendStartedAt > TX_SEND_OPTS.timeoutMs + 5000) {
+      console.warn('[placeGuess] previous send appears stuck — resetting send state');
+      setSending(false);
+    } else {
+      showError('Still placing your last guess — hang tight.');
+      return;
+    }
+  }
+  // The on-chain bet goes through the hosted bridge's sendTransaction. If the
+  // bridge script hasn't wired it up yet (still loading, or opened outside the
+  // Usernode shell), tell the player rather than no-opping.
+  if (typeof window.sendTransaction !== 'function') {
+    showError('Wallet bridge not ready — reload the app.');
+    return;
+  }
   if (!loggedIn) { showError('Sign in to play.'); return; }
   if (!appPubkey) { showError('App not ready — please wait.'); return; }
   if (!myAddress) { showError('Wallet not connected.'); return; }
-
-  const guess = parseInt(document.getElementById('guess-slider').value, 10);
 
   const round = getActiveRound();
   if (!round) { showError('No active round.'); return; }
   if (round.endedAt) { showError('This round has ended.'); return; }
 
+  const guess = parseInt(document.getElementById('guess-slider').value, 10);
   const roundRange = (round && round.range) ? round.range : 100;
   if (guess < 1 || guess > roundRange) { showError('Guess must be between 1 and ' + roundRange + '.'); return; }
 
@@ -1109,11 +1216,12 @@ async function placeGuess() {
   // Keep `sending` true through the confirmed flash so the poll loop's
   // updateGuessCard can't re-enable the button mid-lifecycle.
   setBtnState(guessBtn, 'pending', 'Confirming…');
+  console.log('[placeGuess] opening bridge approval for guess', { round: round.id, guess, to: appPubkey });
   try {
     if (DEMO) {
       await demoHold();
     } else {
-      await window.sendTransaction(appPubkey, 1, memoStr, {
+      const result = await window.sendTransaction(appPubkey, 1, memoStr, {
         ...TX_SEND_OPTS,
         serverCacheUrl: '/__usernode/cache/' + appPubkey,
         confirmTitle: 'Lock in your guess',
@@ -1121,10 +1229,22 @@ async function placeGuess() {
           ? 'Guess #' + guess + ' — 1 token. You have ' + guessesLeft + ' guess' + (guessesLeft !== 1 ? 'es' : '') + ' remaining (each costs 1 token).'
           : 'Guess #' + guess + ' — 1 token entry fee. This cannot be changed.',
       });
+      // The hosted bridge waits for on-chain inclusion via /waitForTx and hands
+      // back the confirmed transaction. Read it defensively — the resolved shape
+      // is owned by the bridge and may carry no tx on its "queued" path. When we
+      // do have a confirmation, optimistically drop the guess into the active
+      // round so it shows instantly instead of waiting for the next poll to
+      // rediscover what we already know landed.
+      const confirmedTx = (result && typeof result === 'object' && result.tx &&
+        typeof result.tx === 'object') ? result.tx : null;
+      if (confirmedTx) applyOptimisticGuess(round.id, guess);
     }
     // Tx is included — show the confirmed flash, then let normal render take over.
     setBtnState(guessBtn, 'confirmed', 'Guess locked in');
-    fastPollEnd = Date.now() + FAST_POLL_DURATION;
+    // Exactly one authoritative refresh to reconcile pot / participants /
+    // leaderboard. No 30s fast-poll burst: the bridge confirmation already
+    // told us the tx is in (and the same cache feeds /__numguess/state), so a
+    // single read is enough. The round-end fast-poll burst stays elsewhere.
     if (!DEMO) await refreshState();
     setTimeout(() => {
       setSending(false);
@@ -1135,8 +1255,11 @@ async function placeGuess() {
     setSending(false);
     setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
     const msg = e && e.message ? e.message : String(e);
-    if (msg.toLowerCase().includes('timeout')) {
+    const low = msg.toLowerCase();
+    if (low.includes('timeout')) {
       showError('Transaction timed out — it may still confirm. Check back shortly.');
+    } else if (low.includes('declin') || low.includes('reject') || low.includes('cancel') || low.includes('denied')) {
+      showError('Transaction declined — your guess was not placed.');
     } else {
       showError('Transaction failed: ' + msg);
     }
@@ -1639,6 +1762,94 @@ function toggleHist(id) {
   if (tog) tog.textContent = open ? '▲' : '▼';
 }
 
+// ---- My Games (personal history) ----
+let myGamesData = null;
+
+async function refreshMyGames() {
+  const list = document.getElementById('mygames-list');
+  const summary = document.getElementById('mygames-summary');
+  if (!list) return;
+
+  // Not signed in → prompt to sign in, consistent with the rest of the app.
+  if (!loggedIn) {
+    if (summary) summary.style.display = 'none';
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔒</div><p>Sign in to see your game history.</p></div>';
+    return;
+  }
+
+  try {
+    const headers = window._ngToken ? { 'x-usernode-token': window._ngToken } : {};
+    // Forward ?demo=1 so a staging reviewer sees the seeded demo history.
+    const demo = new URLSearchParams(window.location.search).get('demo') === '1' ? '?demo=1' : '';
+    const res = await fetch('/api/my-history' + demo, { cache: 'no-store', headers });
+    if (res.status === 401) {
+      if (summary) summary.style.display = 'none';
+      list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔒</div><p>Sign in to see your game history.</p></div>';
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    myGamesData = await res.json();
+    renderMyGames();
+  } catch (e) {
+    if (summary) summary.style.display = 'none';
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p>Couldn’t load your games. Try again in a moment.</p></div>';
+  }
+}
+
+function renderMyGames() {
+  const list = document.getElementById('mygames-list');
+  const summary = document.getElementById('mygames-summary');
+  if (!list || !myGamesData) return;
+
+  const results = myGamesData.results || [];
+  const stats = myGamesData.stats || { played: 0, wins: 0, winRate: 0 };
+
+  if (!results.length) {
+    if (summary) summary.style.display = 'none';
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><p>No games yet — place a guess to get started.</p></div>';
+    return;
+  }
+
+  if (summary) {
+    summary.style.display = '';
+    summary.innerHTML =
+      '<div class="mg-stat"><strong>' + stats.played + '</strong><small>games</small></div>' +
+      '<div class="mg-stat"><strong>' + stats.wins + '</strong><small>wins</small></div>' +
+      '<div class="mg-stat"><strong>' + stats.winRate + '%</strong><small>win rate</small></div>';
+  }
+
+  const trackLabel = { '1h': '1H', '6h': '6H', '1d': '1D', '1w': '1W' };
+  list.innerHTML = results.map((r) => {
+    const date = r.ended_at ? new Date(r.ended_at).toLocaleDateString() : '';
+    const tl = trackLabel[r.track] || (r.track || '');
+    const diff = r.difficulty ? r.difficulty.charAt(0).toUpperCase() + r.difficulty.slice(1) : '';
+    const tags = [tl, diff].filter(Boolean).join(' · ');
+    const guesses = r.num_guesses === 1 ? '1 guess' : (r.num_guesses || 0) + ' guesses';
+
+    let outcomeHtml;
+    if (r.won) {
+      outcomeHtml = '<span class="mg-outcome win">🏆 Won · +' + (r.pot || 0) + ' tokens</span>';
+    } else {
+      let best = '';
+      if (r.best_guess != null) {
+        const distPart = r.best_distance != null
+          ? ' (' + (r.best_distance === 0 ? '🎯' : r.best_distance + ' away') + ')'
+          : '';
+        best = ' · your best: ' + r.best_guess + distPart;
+      }
+      outcomeHtml = '<span class="mg-outcome loss">Lost' + best + '</span>';
+    }
+
+    return '<div class="mg-row' + (r.won ? ' is-winner' : '') + '">' +
+      '<div class="mg-main">' +
+        '<div class="mg-round">Round ' + r.round_id + '</div>' +
+        '<div class="mg-meta">' + escapeHtml(tags) + (tags ? ' · ' : '') + guesses + (date ? ' · ' + date : '') + '</div>' +
+      '</div>' +
+      '<div class="mg-right">' + outcomeHtml + '</div>' +
+    '</div>';
+  }).join('');
+}
+
 // ---- Poll loop ----
 function scheduleNextPoll() {
   if (pollTimer) clearTimeout(pollTimer);
@@ -1651,6 +1862,7 @@ function scheduleNextPoll() {
       if (name && name !== myUsername) { myUsername = name; updateGreeting(); }
     }
     await refreshState();
+    if (currentTab === 'mygames') refreshMyGames();
     scheduleNextPoll();
   }, ms);
 }
@@ -1667,12 +1879,11 @@ async function init() {
   wantDemo = params.get('demo') === '1';
 
   try {
-    // No mock mode — always discover the live chain id via the hosted bridge.
-    try {
-      await window.discoverChainId();
-    } catch (e) {
-      console.warn('discoverChainId failed:', e.message);
-    }
+    // No client-side chain bootstrap needed: the hosted bridge discovers the
+    // live chain id on its own when getNodeAddress()/sendTransaction() are
+    // called (same path the username send uses). We previously called a
+    // non-existent window.discoverChainId() here, which always threw and was
+    // swallowed — removed so init no longer fails mid-bootstrap.
 
     // Silent auto-sign-in: if a wallet is already connected, go straight to
     // the board; otherwise applyAuthUI() shows the sign-in gate.

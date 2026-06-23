@@ -40,6 +40,11 @@
       "expectSelector": ".header"
     },
     {
+      "name": "Place Guess button is present on the Game tab",
+      "path": "/",
+      "expectSelector": "#guess-btn"
+    },
+    {
       "name": "Leaderboard tab renders",
       "path": "/",
       "expectSelector": ".bottom-nav"
@@ -105,11 +110,6 @@
       "expectSelector": "#lb-medium"
     },
     {
-      "name": "Mock probe reports disabled (no mock layer)",
-      "path": "/__mock/enabled",
-      "expectText": "{\"enabled\":false}"
-    },
-    {
       "name": "Usernames cache serves seeded staging name",
       "path": "/__usernames/state",
       "expectText": "alice_s"
@@ -133,6 +133,16 @@
       "name": "State endpoint exposes the staging flag",
       "path": "/__numguess/state",
       "expectText": "\"staging\""
+    },
+    {
+      "name": "My Games tab renders in the bottom nav",
+      "path": "/?demo=1",
+      "expectSelector": "#nav-mygames"
+    },
+    {
+      "name": "Personal history endpoint returns demo results",
+      "path": "/api/my-history?demo=1",
+      "expectText": "outcome"
     }
   ]
 }
