@@ -248,6 +248,64 @@ function createGame(opts) {
   }
 
   // ---------------------------------------------------------------------------
+  // Win streaks — derived purely from completed on-chain rounds
+  // ---------------------------------------------------------------------------
+  //
+  // Mirrors the win/reset rule that used to live in server.js `updateStreaks`:
+  //   - a completed round WITH a winner: winner's current streak += 1; every
+  //     other participant (distinct guesser) resets to 0; non-participants are
+  //     untouched.
+  //   - a completed round with NO winner: streaks are not modified at all.
+  //   - bestStreak is the running maximum of currentStreak over time.
+  // Rounds are folded in chronological order (endedAt asc, fallback startedAt),
+  // matching how getPastRoundsForTrack orders history.
+
+  function getTrackStreaks(track) {
+    const completed = [];
+    for (const [, r] of rounds) {
+      if (r.endedAt && r.durationTrack === track) completed.push(r);
+    }
+    completed.sort((a, b) => {
+      const ea = a.endedAt != null ? a.endedAt : a.startedAt;
+      const eb = b.endedAt != null ? b.endedAt : b.startedAt;
+      return ea - eb;
+    });
+
+    const streaks = {}; // pubkey -> { currentStreak, bestStreak }
+    const ensure = (pk) => {
+      if (!streaks[pk]) streaks[pk] = { currentStreak: 0, bestStreak: 0 };
+      return streaks[pk];
+    };
+
+    for (const r of completed) {
+      if (!r.winner) continue; // no-winner rounds leave every streak untouched
+      const w = ensure(r.winner);
+      w.currentStreak += 1;
+      if (w.currentStreak > w.bestStreak) w.bestStreak = w.currentStreak;
+      const participants = new Set(r.guesses.map((g) => g.from));
+      for (const p of participants) {
+        if (p === r.winner) continue;
+        ensure(p).currentStreak = 0;
+      }
+    }
+    return streaks;
+  }
+
+  // Per-track streak object for a single player, shaped exactly like the
+  // `myStreaks` payload the frontend consumes (each track defaults to 0/0).
+  function getMyStreaks(pubkey) {
+    const TRACK_KEYS = ['1h', '6h', '1d', '1w'];
+    const out = {};
+    for (const track of TRACK_KEYS) {
+      const s = pubkey ? getTrackStreaks(track)[pubkey] : null;
+      out[track] = s
+        ? { currentStreak: s.currentStreak, bestStreak: s.bestStreak }
+        : { currentStreak: 0, bestStreak: 0 };
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
   // Legacy helpers (kept for backward compat)
   // ---------------------------------------------------------------------------
 
@@ -383,6 +441,8 @@ function createGame(opts) {
     getPastRoundsForTrack,
     getPlayerStatsForTrack,
     getPlayerStatsForDifficulty,
+    getTrackStreaks,
+    getMyStreaks,
     getStateResponse,
     handleRequest,
     rounds,

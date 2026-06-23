@@ -2,7 +2,6 @@
 
 const express = require('express');
 const path = require('path');
-const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -21,7 +20,6 @@ loadEnvFile();
 
 const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
-const pool = process.env.DATABASE_URL ? new Pool({ connectionString: process.env.DATABASE_URL }) : null;
 const JWT_SECRET = process.env.JWT_SECRET;
 
 const APP_PUBKEY = process.env.APP_PUBKEY || 'utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20yx79';
@@ -490,86 +488,6 @@ function injectStagingSeeds() {
   console.log('[staging] Injected', fakeTxs.length, 'seed transactions (', usernameSeedTxs.length, 'usernames )');
 }
 
-async function seedStagingDb() {
-  if (!pool) return;
-  try {
-    // Legacy streaks
-    await pool.query(`
-      INSERT INTO player_streaks (pubkey, current_streak, best_streak, updated_at)
-      VALUES
-        ('utpk1stagingplayer000000000000000000000000000000000000000001', 3, 5, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000002', 1, 2, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000003', 0, 1, 0)
-      ON CONFLICT (pubkey) DO NOTHING
-    `);
-    // Per-track streaks
-    await pool.query(`
-      INSERT INTO player_track_streaks (pubkey, track, current_streak, best_streak, updated_at)
-      VALUES
-        ('utpk1stagingplayer000000000000000000000000000000000000000001', '1h', 2, 3, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000001', '6h', 1, 2, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000001', '1d', 3, 5, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000001', '1w', 0, 1, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000002', '1h', 0, 1, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000002', '6h', 0, 1, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000002', '1d', 1, 2, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000002', '1w', 0, 1, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000003', '1h', 0, 1, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000003', '6h', 1, 1, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000003', '1d', 0, 1, 0),
-        ('utpk1stagingplayer000000000000000000000000000000000000000003', '1w', 0, 0, 0)
-      ON CONFLICT (pubkey, track) DO NOTHING
-    `);
-    console.log('[staging] Seeded player_streaks and player_track_streaks');
-  } catch (e) {
-    console.error('[staging] seedStagingDb error:', e.message);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Streak helpers
-// ---------------------------------------------------------------------------
-
-async function updateStreaks(winnerPubkey, participantPubkeys, track) {
-  if (!pool) return;
-  try {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      if (winnerPubkey) {
-        await client.query(
-          `INSERT INTO player_track_streaks (pubkey, track, current_streak, best_streak, updated_at)
-           VALUES ($1, $2, 1, 1, $3)
-           ON CONFLICT (pubkey, track) DO UPDATE SET
-             current_streak = player_track_streaks.current_streak + 1,
-             best_streak = GREATEST(player_track_streaks.best_streak, player_track_streaks.current_streak + 1),
-             updated_at = $3`,
-          [winnerPubkey, track, Date.now()]
-        );
-      }
-      const losers = participantPubkeys.filter((p) => p !== winnerPubkey);
-      for (const loser of losers) {
-        await client.query(
-          `INSERT INTO player_track_streaks (pubkey, track, current_streak, best_streak, updated_at)
-           VALUES ($1, $2, 0, 0, $3)
-           ON CONFLICT (pubkey, track) DO UPDATE SET
-             current_streak = 0,
-             updated_at = $3`,
-          [loser, track, Date.now()]
-        );
-      }
-      await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
-  } catch (e) {
-    console.error('[streaks] update failed:', e.message);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Payout logic
 // ---------------------------------------------------------------------------
@@ -646,13 +564,11 @@ async function concludeRound(round, track) {
     }
 
     // 2. Post end_round self-transfer (or inject locally in staging)
+    // Win streaks are derived from completed rounds on read (game.getMyStreaks),
+    // so there is no separate streak store to update here.
     await postEndRound(round, secret, winner, result.winner.guess, pot, round.guesses.length);
 
-    // 3. Update per-track streaks
-    const allParticipants = [...new Set(round.guesses.map((g) => g.from))];
-    await updateStreaks(winner, allParticipants, track);
-
-    // 4. Start next round for same track
+    // 3. Start next round for same track
     await postStartRound(track);
     inFlightPayout[track] = false;
   } catch (e) {
@@ -816,27 +732,10 @@ app.get('/__numguess/state', async (req, res) => {
   const state = game.getStateResponse();
   state.pendingDifficulty = { ...pendingDifficulty };
 
-  if (pool && req.user && req.user.usernode_pubkey) {
-    try {
-      const r = await pool.query(
-        'SELECT track, current_streak, best_streak FROM player_track_streaks WHERE pubkey = $1',
-        [req.user.usernode_pubkey]
-      );
-      const myStreaks = {
-        '1h': { currentStreak: 0, bestStreak: 0 },
-        '6h': { currentStreak: 0, bestStreak: 0 },
-        '1d': { currentStreak: 0, bestStreak: 0 },
-        '1w': { currentStreak: 0, bestStreak: 0 },
-      };
-      for (const row of r.rows) {
-        if (myStreaks[row.track]) {
-          myStreaks[row.track] = { currentStreak: row.current_streak, bestStreak: row.best_streak };
-        }
-      }
-      state.myStreaks = myStreaks;
-    } catch (e) {
-      console.error('[streaks] state query:', e.message);
-    }
+  // Per-track win streaks for the signed-in player, derived purely from the
+  // on-chain round history (no database). Same shape the frontend expects.
+  if (req.user && req.user.usernode_pubkey) {
+    state.myStreaks = game.getMyStreaks(req.user.usernode_pubkey);
   }
 
   res.json(state);
@@ -929,43 +828,10 @@ async function start() {
     }
   }
 
-  // DB migrations
-  if (pool) {
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS player_streaks (
-          pubkey         TEXT    PRIMARY KEY,
-          current_streak INTEGER NOT NULL DEFAULT 0,
-          best_streak    INTEGER NOT NULL DEFAULT 0,
-          updated_at     BIGINT  NOT NULL DEFAULT 0
-        )
-      `);
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS player_track_streaks (
-          pubkey          TEXT    NOT NULL,
-          track           TEXT    NOT NULL,
-          current_streak  INTEGER NOT NULL DEFAULT 0,
-          best_streak     INTEGER NOT NULL DEFAULT 0,
-          updated_at      BIGINT  NOT NULL DEFAULT 0,
-          PRIMARY KEY (pubkey, track)
-        )
-      `);
-      // Migrate existing player_streaks → player_track_streaks as '1d' track
-      await pool.query(`
-        INSERT INTO player_track_streaks (pubkey, track, current_streak, best_streak, updated_at)
-        SELECT pubkey, '1d', current_streak, best_streak, updated_at
-        FROM player_streaks
-        ON CONFLICT (pubkey, track) DO NOTHING
-      `);
-      console.log('[db] player_streaks and player_track_streaks tables ready');
-    } catch (e) {
-      console.error('[db] migration error:', e.message);
-    }
-  }
-
+  // No database: all state (rounds, guesses, results, scores, win streaks) is
+  // derived from on-chain transactions. Staging seeds are injected on-chain.
   if (IS_STAGING) {
     injectStagingSeeds();
-    await seedStagingDb();
   }
 
   await numguessCache.start();
