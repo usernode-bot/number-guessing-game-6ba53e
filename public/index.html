@@ -482,6 +482,25 @@
       .guess-number { font-size: 5rem; }
       .result-secret { font-size: 4.5rem; }
     }
+    /* ---- Sign-in gate ---- */
+    .panel.logged-out > *:not(#signin-gate) { display: none !important; }
+    .signin-gate { text-align: center; padding: 2.5rem 1.5rem; margin-bottom: 1rem; }
+    .signin-logo { font-size: 3rem; line-height: 1; margin-bottom: .75rem; }
+    .signin-title { font-size: 1.25rem; font-weight: 800; color: var(--text); margin-bottom: .5rem; }
+    .signin-sub { font-size: .9rem; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.4; }
+    .signin-gate .btn { max-width: 18rem; margin: 0 auto; }
+    .signin-guidance {
+      margin-top: 1rem; font-size: .82rem; color: var(--text-muted);
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .75rem 1rem; line-height: 1.4;
+    }
+    /* ---- Welcome greeting ---- */
+    .welcome-greeting {
+      font-size: .95rem; font-weight: 700; color: var(--text);
+      margin: 0 .25rem 1rem; padding: .6rem .9rem;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
   </style>
 </head>
 <body>
@@ -492,7 +511,7 @@
 <header class="header">
   <span class="header-logo">🎯</span>
   <span class="header-title">Number Guessing Game</span>
-  <div class="username-pill" id="username-pill" onclick="openUsernameModal()">
+  <div class="username-pill" id="username-pill" onclick="onHeaderPillClick()">
     <span>👤</span>
     <span id="username-display">…</span>
   </div>
@@ -504,6 +523,20 @@
 
   <!-- Game Panel -->
   <div class="panel active" id="panel-game">
+
+    <!-- Sign-in gate (shown when no Usernode wallet is connected) -->
+    <div class="card signin-gate" id="signin-gate" style="display:none">
+      <div class="signin-logo">🎯</div>
+      <div class="signin-title">Sign in to play</div>
+      <div class="signin-sub" id="signin-sub">Sign in with your Usernode wallet to play.</div>
+      <button class="btn" id="signin-btn" onclick="doSignIn()">Sign in</button>
+      <div class="signin-guidance" id="signin-guidance" style="display:none">
+        Open this app inside Usernode to connect your wallet.
+      </div>
+    </div>
+
+    <!-- Welcome greeting (shown when signed in) -->
+    <div class="welcome-greeting" id="welcome-greeting" style="display:none"></div>
 
     <!-- Track selector -->
     <div class="segment track-selector" id="game-track-selector">
@@ -683,6 +716,7 @@ let myAddress = null;
 let myPubkey = null;
 let appPubkey = null;
 let myUsername = null;
+let loggedIn = false;
 let gameState = null;
 let sending = false;
 let currentTab = 'game';
@@ -773,6 +807,102 @@ function setSending(val) {
   sending = val;
   const btn = document.getElementById('guess-btn');
   if (btn) btn.disabled = val;
+}
+
+// ---- Auth / login gate ----
+// "Logged in" == a Usernode wallet address resolved via the bridge. Placing a
+// guess is an on-chain tx that requires a connected wallet, so wallet presence
+// is the gate for play. Leaderboard/History stay viewable while logged out.
+async function attemptSignIn() {
+  let addr = null;
+  try {
+    addr = await window.getNodeAddress();
+  } catch (e) {
+    console.warn('getNodeAddress failed:', e && e.message ? e.message : e);
+  }
+  if (!addr) return false;
+
+  myAddress = addr;
+  myPubkey = addr;
+  loggedIn = true;
+
+  // Resolve the chosen display name; fall back to the default until it loads.
+  myUsername = 'user_' + addr.slice(-6);
+  try {
+    if (window.UsernodeUsernames) {
+      await UsernodeUsernames.init();
+      const name = UsernodeUsernames.getUsernameSync(addr);
+      if (name) myUsername = name;
+    }
+  } catch (e) {
+    console.warn('UsernodeUsernames.init failed:', e && e.message ? e.message : e);
+  }
+  const suffixEl = document.getElementById('username-suffix');
+  if (suffixEl) suffixEl.textContent = '_' + addr.slice(-6);
+  return true;
+}
+
+// Toggle the game panel between the logged-out gate and the live board.
+function applyAuthUI() {
+  const panel = document.getElementById('panel-game');
+  const gate = document.getElementById('signin-gate');
+  const greeting = document.getElementById('welcome-greeting');
+  const pill = document.getElementById('username-display');
+
+  if (loggedIn) {
+    panel.classList.remove('logged-out');
+    gate.style.display = 'none';
+    if (greeting) greeting.style.display = '';
+    updateGreeting();
+  } else {
+    panel.classList.add('logged-out');
+    gate.style.display = '';
+    if (greeting) greeting.style.display = 'none';
+    if (pill) pill.textContent = 'Sign in';
+  }
+}
+
+// Refresh the welcome line + header pill from the current username.
+function updateGreeting() {
+  if (!loggedIn) return;
+  const name = myUsername || (myAddress ? 'user_' + myAddress.slice(-6) : 'player');
+  const greeting = document.getElementById('welcome-greeting');
+  if (greeting) greeting.textContent = 'Welcome, ' + name;
+  const pill = document.getElementById('username-display');
+  if (pill) pill.textContent = name;
+}
+
+// Sign-in button handler — (re)attempt the bridge connection.
+async function doSignIn() {
+  const btn = document.getElementById('signin-btn');
+  const guidance = document.getElementById('signin-guidance');
+  btn.disabled = true;
+  btn.textContent = 'Connecting…';
+  let ok = false;
+  try {
+    ok = await attemptSignIn();
+  } finally {
+    btn.disabled = false;
+  }
+  if (ok) {
+    if (guidance) guidance.style.display = 'none';
+    applyAuthUI();
+    await refreshState();
+    if (gameState) render();
+  } else {
+    btn.textContent = 'Try again';
+    if (guidance) guidance.style.display = '';
+  }
+}
+
+// Header pill: sign in when logged out, rename when logged in.
+function onHeaderPillClick() {
+  if (loggedIn) {
+    openUsernameModal();
+  } else {
+    switchTab('game');
+    doSignIn();
+  }
 }
 
 // ---- Slider sync ----
@@ -867,6 +997,7 @@ function getMyBestGuess(round, myGuesses) {
 // ---- Guess action ----
 async function placeGuess() {
   if (sending) return;
+  if (!loggedIn) { showError('Sign in to play.'); return; }
   if (!appPubkey) { showError('App not ready — please wait.'); return; }
   if (!myAddress) { showError('Wallet not connected.'); return; }
 
@@ -1407,6 +1538,11 @@ function scheduleNextPoll() {
   const ms = Date.now() < fastPollEnd ? FAST_POLL_MS : GAME_POLL_MS;
   pollTimer = setTimeout(async () => {
     if (window.UsernodeUsernames) await UsernodeUsernames.refresh();
+    // Upgrade the greeting/pill once the chosen username resolves from cache.
+    if (loggedIn && window.UsernodeUsernames && myAddress) {
+      const name = UsernodeUsernames.getUsernameSync(myAddress);
+      if (name && name !== myUsername) { myUsername = name; updateGreeting(); }
+    }
     await refreshState();
     scheduleNextPoll();
   }, ms);
@@ -1428,38 +1564,17 @@ async function init() {
       console.warn('discoverChainId failed:', e.message);
     }
 
-    try {
-      myAddress = await window.getNodeAddress();
-      myPubkey = myAddress;
-    } catch (e) {
-      console.warn('getNodeAddress failed:', e.message);
-    }
+    // Silent auto-sign-in: if a wallet is already connected, go straight to
+    // the board; otherwise applyAuthUI() shows the sign-in gate.
+    await attemptSignIn();
+    applyAuthUI();
 
     await refreshState();
-
-    if (window.UsernodeUsernames) {
-      try {
-        await UsernodeUsernames.init();
-        if (myAddress) {
-          const name = UsernodeUsernames.getUsernameSync(myAddress);
-          myUsername = name;
-          document.getElementById('username-display').textContent = name;
-          document.getElementById('username-suffix').textContent =
-            '_' + (myAddress ? myAddress.slice(-6) : 'xxxxxx');
-        }
-      } catch (e) {
-        console.warn('UsernodeUsernames.init failed:', e.message);
-      }
-    }
-
-    if (!myUsername && myAddress) {
-      myUsername = 'user_' + myAddress.slice(-6);
-      document.getElementById('username-display').textContent = myUsername;
-    }
 
   } catch (e) {
     showError('Bridge unavailable: ' + (e.message || e));
     console.error('init error:', e);
+    applyAuthUI();
   }
 
   scheduleNextPoll();
