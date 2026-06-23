@@ -719,6 +719,8 @@ let myUsername = null;
 let loggedIn = false;
 let gameState = null;
 let sending = false;
+let sendStartedAt = 0;      // ms timestamp of the in-flight send, for stuck-send recovery
+let lastSignInReason = '';  // human-readable reason the last wallet connect attempt failed
 let currentTab = 'game';
 let fastPollEnd = 0;
 let pollTimer = null;
@@ -823,6 +825,7 @@ function escapeHtml(str) {
 // ---- Sending state ----
 function setSending(val) {
   sending = val;
+  if (val) sendStartedAt = Date.now();
   const btn = document.getElementById('guess-btn');
   if (btn) btn.disabled = val;
 }
@@ -833,12 +836,22 @@ function setSending(val) {
 // is the gate for play. Leaderboard/History stay viewable while logged out.
 async function attemptSignIn() {
   let addr = null;
+  if (typeof window.getNodeAddress !== 'function') {
+    lastSignInReason = 'Wallet bridge not ready — reload the app.';
+    console.warn('attemptSignIn:', lastSignInReason);
+    return false;
+  }
   try {
     addr = await window.getNodeAddress();
   } catch (e) {
+    lastSignInReason = 'Open this app inside Usernode to connect your wallet.';
     console.warn('getNodeAddress failed:', e && e.message ? e.message : e);
   }
-  if (!addr) return false;
+  if (!addr) {
+    if (!lastSignInReason) lastSignInReason = 'No Usernode wallet connected yet — open this app inside Usernode.';
+    return false;
+  }
+  lastSignInReason = '';
 
   myAddress = addr;
   myPubkey = addr;
@@ -877,6 +890,12 @@ function applyAuthUI() {
     gate.style.display = '';
     if (greeting) greeting.style.display = 'none';
     if (pill) pill.textContent = 'Sign in';
+    // Surface why the wallet didn't connect rather than leaving a dead-looking gate.
+    const guidance = document.getElementById('signin-guidance');
+    if (guidance && lastSignInReason) {
+      guidance.textContent = lastSignInReason;
+      guidance.style.display = '';
+    }
   }
 }
 
@@ -909,7 +928,10 @@ async function doSignIn() {
     if (gameState) render();
   } else {
     btn.textContent = 'Try again';
-    if (guidance) guidance.style.display = '';
+    if (guidance) {
+      guidance.textContent = lastSignInReason || 'Open this app inside Usernode to connect your wallet.';
+      guidance.style.display = '';
+    }
   }
 }
 
@@ -1014,7 +1036,25 @@ function getMyBestGuess(round, myGuesses) {
 
 // ---- Guess action ----
 async function placeGuess() {
-  if (sending) return;
+  // Never silently swallow a tap. If a previous send is genuinely still in
+  // flight, say so; if it looks wedged (promise never settled past the tx
+  // timeout), recover instead of disabling the button forever.
+  if (sending) {
+    if (Date.now() - sendStartedAt > TX_SEND_OPTS.timeoutMs + 5000) {
+      console.warn('[placeGuess] previous send appears stuck — resetting send state');
+      setSending(false);
+    } else {
+      showError('Still placing your last guess — hang tight.');
+      return;
+    }
+  }
+  // The on-chain bet goes through the hosted bridge's sendTransaction. If the
+  // bridge script hasn't wired it up yet (still loading, or opened outside the
+  // Usernode shell), tell the player rather than no-opping.
+  if (typeof window.sendTransaction !== 'function') {
+    showError('Wallet bridge not ready — reload the app.');
+    return;
+  }
   if (!loggedIn) { showError('Sign in to play.'); return; }
   if (!appPubkey) { showError('App not ready — please wait.'); return; }
   if (!myAddress) { showError('Wallet not connected.'); return; }
@@ -1040,6 +1080,7 @@ async function placeGuess() {
 
   setSending(true);
   clearErrors();
+  console.log('[placeGuess] opening bridge approval for guess', { round: round.id, guess, to: appPubkey });
   try {
     await window.sendTransaction(appPubkey, 1, memoStr, {
       ...TX_SEND_OPTS,
@@ -1055,8 +1096,11 @@ async function placeGuess() {
   } catch (e) {
     setSending(false);
     const msg = e && e.message ? e.message : String(e);
-    if (msg.toLowerCase().includes('timeout')) {
+    const low = msg.toLowerCase();
+    if (low.includes('timeout')) {
       showError('Transaction timed out — it may still confirm. Check back shortly.');
+    } else if (low.includes('declin') || low.includes('reject') || low.includes('cancel') || low.includes('denied')) {
+      showError('Transaction declined — your guess was not placed.');
     } else {
       showError('Transaction failed: ' + msg);
     }
@@ -1576,12 +1620,11 @@ async function init() {
   window._ngToken = token;
 
   try {
-    // No mock mode — always discover the live chain id via the hosted bridge.
-    try {
-      await window.discoverChainId();
-    } catch (e) {
-      console.warn('discoverChainId failed:', e.message);
-    }
+    // No client-side chain bootstrap needed: the hosted bridge discovers the
+    // live chain id on its own when getNodeAddress()/sendTransaction() are
+    // called (same path the username send uses). We previously called a
+    // non-existent window.discoverChainId() here, which always threw and was
+    // swallowed — removed so init no longer fails mid-bootstrap.
 
     // Silent auto-sign-in: if a wallet is already connected, go straight to
     // the board; otherwise applyAuthUI() shows the sign-in gate.
