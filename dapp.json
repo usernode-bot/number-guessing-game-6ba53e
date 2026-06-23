@@ -123,6 +123,16 @@
       "name": "Welcome greeting element is present",
       "path": "/",
       "expectSelector": "#welcome-greeting"
+    },
+    {
+      "name": "Demo mode loads the guess button without console errors",
+      "path": "/?demo=1",
+      "expectSelector": "#guess-btn"
+    },
+    {
+      "name": "State endpoint exposes the staging flag",
+      "path": "/__numguess/state",
+      "expectText": "\"staging\""
     }
   ]
 }

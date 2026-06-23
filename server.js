@@ -760,11 +760,12 @@ app.use((req, res, next) => {
 // Game state endpoint — returns per-track data with per-track streaks
 app.get('/__numguess/state', async (req, res) => {
   if (!numguessCache.isStreamReady()) {
-    res.json({ loading: true, appPubkey: APP_PUBKEY });
+    res.json({ loading: true, appPubkey: APP_PUBKEY, staging: IS_STAGING });
     return;
   }
   res.set('cache-control', 'no-store');
   const state = game.getStateResponse();
+  state.staging = IS_STAGING;
   state.pendingDifficulty = { ...pendingDifficulty };
 
   // Per-track win streaks for the signed-in player, derived purely from the
