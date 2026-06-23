@@ -267,6 +267,19 @@ function injectStagingSeeds() {
     { id: 'staging-r12-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 12, seed_hash: activeHashes.r12, active_duration_ms: 86400000, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d' }), timestamp_ms: now - 2 * hour },
     { id: 'staging-r12-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 12, guess: 25 }), timestamp_ms: now - hour - 30 * 60000 },
     { id: 'staging-r12-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 12, guess: 60 }), timestamp_ms: now - hour },
+    // Round 12 ends (multi-guess 1d round → 1d history) so the 1d track has exactly
+    // one live round on boot: the single-guess round 13 below. secret=20 (seed_hash
+    // 0x00000077 % 100 + 1); p1's 25 is closest → p1 wins.
+    { id: 'staging-r12-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 12, secret: 20, winner: p1, winner_guess: 25, pot: 2, participants: 2 }), timestamp_ms: now - 30 * 60000 },
+
+    // Round 13 — 1d — ACTIVE, SINGLE-GUESS, MEDIUM (range 1–100). Started 20 min ago,
+    // so it is the current 1d round the player lands on. Only p2 has guessed, so the
+    // signed-in staging wallet has ZERO guesses and the Place Guess button is live:
+    // pressing it opens the bridge approval popup, and after approval the card flips
+    // to the "locked in" state. The multi-guess flow is exercisable on the 6h (round
+    // 11) and 1w (round 6) tracks, which keep their seeded active multi-guess rounds.
+    { id: 'staging-r13-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 13, seed_hash: '00000050' + 'a'.repeat(56), active_duration_ms: 86400000, min_players: MIN_PLAYERS, max_guesses_per_player: 1, mode: 'normal', duration_track: '1d', difficulty: 'medium' }), timestamp_ms: now - 20 * 60000 },
+    { id: 'staging-r13-g1', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 13, guess: 60 }), timestamp_ms: now - 18 * 60000 },
 
     // ---- Extra 1D rounds for leaderboard demonstration (multi-guess, varied bestWinGuessCount) ----
     // Rounds 20–30: 11 completed 1d rounds, each ~1 day long, placed 20–30 days in the past.

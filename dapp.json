@@ -40,6 +40,11 @@
       "expectSelector": ".header"
     },
     {
+      "name": "Place Guess button is present on the Game tab",
+      "path": "/",
+      "expectSelector": "#guess-btn"
+    },
+    {
       "name": "Leaderboard tab renders",
       "path": "/",
       "expectSelector": ".bottom-nav"
