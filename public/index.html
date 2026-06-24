@@ -234,6 +234,14 @@
     }
     .my-guess-val { font-weight: 800; font-size: 1.05rem; color: var(--accent-light); font-variant-numeric: tabular-nums; }
     .my-guess-tag { font-size: .7rem; font-weight: 600; color: var(--text-muted); margin-left: auto; }
+    /* Pending (optimistic) guess: dimmed until the on-chain tx is observed. */
+    .my-guess-row.is-pending { opacity: .62; border-style: dashed; }
+    .my-guess-pending-dot {
+      display: inline-block; width: .85em; height: .85em; flex: 0 0 auto;
+      border: 2px solid var(--accent-soft-border); border-top-color: var(--accent-light);
+      border-radius: 50%; animation: btn-spin .7s linear infinite;
+    }
+    .my-guess-tag.is-pending { color: var(--accent-light); }
     /* ---- Slider + hero number ---- */
     .slider-row { display: flex; flex-direction: column-reverse; align-items: stretch; gap: 1.4rem; margin-bottom: .5rem; }
     .guess-slider {
@@ -763,6 +771,11 @@ const TX_SEND_OPTS = { timeoutMs: 180000, pollIntervalMs: 1500 };
 const GAME_POLL_MS = 4000;
 const FAST_POLL_MS = 1000;
 const FAST_POLL_DURATION = 30000;
+// A timed-out optimistic guess (tx may still confirm) lingers this long before
+// it's aged out of the pending buffer; any pending entry older than the hard
+// backstop is dropped regardless of status, so nothing leaks forever.
+const PENDING_TIMEOUT_TTL_MS = 90000;
+const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
 const TRACKS = ['1h', '6h', '1d', '1w'];
 
 let myAddress = null;
@@ -777,6 +790,11 @@ let lastSignInReason = '';  // human-readable reason the last wallet connect att
 let currentTab = 'game';
 let fastPollEnd = 0;
 let pollTimer = null;
+// Optimistic guesses placed this session but not yet observed on-chain. Held
+// OUTSIDE gameState (which refreshState() replaces wholesale on every poll) so
+// a just-placed guess survives state replacement and renders instantly. Each:
+// { roundId, track, guess, ts, status: 'pending' | 'confirmed' | 'timeout' }.
+let pendingGuesses = [];
 let countdownTimer = null;
 // Staging-only demo mode (activated by ?demo=1 when the server reports staging):
 // simulates the on-chain send with a fixed pending delay so the spinner →
@@ -1124,37 +1142,66 @@ function tickCountdown() {
 }
 
 // ---- My guesses helpers ----
-function getMyGuesses(round) {
-  if (!round || !myAddress) return [];
-  return round.guesses.filter((g) => g.from === myAddress);
+// Pending optimistic guesses for a specific round (keyed by round id + track,
+// so a track switch or round roll while the bridge popup is open can't bleed a
+// stale entry into the wrong round).
+function getPendingForRound(round) {
+  if (!round || !myAddress || !pendingGuesses.length) return [];
+  return pendingGuesses.filter((p) => p.roundId === round.id && p.track === (round.durationTrack || selectedTrack));
 }
 
-// Optimistically insert a just-confirmed guess into the active round so it
-// renders the instant the wallet confirms, without waiting for the server
-// round-trip. The authoritative list arrives on the next refreshState(), which
-// replaces gameState wholesale — so this is purely a stop-gap for the brief
-// window before that completes. Dedupe by round.id + guess + player so a
-// background poll that already captured the tx can't double-count it, and bump
-// the local guess count (via the guesses array) so "guesses remaining" stays
-// correct on multi-guess rounds until reconciliation.
-function applyOptimisticGuess(roundId, guess) {
-  if (!myAddress || !gameState || !gameState.tracks) return;
-  const td = gameState.tracks[selectedTrack];
-  const round = td && td.currentRound;
-  // Re-read live state: the player may have switched tracks or the round may
-  // have rolled while the bridge popup was open. Only patch the exact round we
-  // sent into; otherwise rely on the single refreshState() that follows.
-  if (!round || round.id !== roundId || round.endedAt) return;
-  if (!Array.isArray(round.guesses)) round.guesses = [];
-  const alreadyShown = round.guesses.some((g) => g && g.from === myAddress && g.guess === guess);
-  if (alreadyShown) return;
-  const wasParticipant = round.guesses.some((g) => g && g.from === myAddress);
-  round.guesses.push({ from: myAddress, guess: guess });
-  // Each guess costs 1 token: bump the local pot, and participants only on the
-  // player's first entry this round. refreshState() overwrites both moments later.
-  if (typeof round.pot === 'number') round.pot += 1;
-  if (!wasParticipant && typeof round.participants === 'number') round.participants += 1;
-  render();
+// "My guesses this round" = the player's authoritative on-chain guesses, plus
+// any optimistic pending guesses not yet reflected on-chain. Deduped by guess
+// value so a background poll that already captured the tx can't double-count.
+// Pending entries carry `pending: true` (until their status flips to
+// 'confirmed') so the renderer can dim them; counts derived from this list
+// (counter / remaining / max-guesses enforcement) tick the instant a guess is
+// placed and stay correct through reconciliation.
+function getMyGuesses(round) {
+  if (!round || !myAddress) return [];
+  const confirmed = (round.guesses || []).filter((g) => g.from === myAddress);
+  const pend = getPendingForRound(round)
+    .filter((p) => !confirmed.some((g) => g.guess === p.guess))
+    .map((p) => ({ from: myAddress, guess: p.guess, pending: p.status !== 'confirmed' }));
+  return confirmed.concat(pend);
+}
+
+// Optimistic pot / participant bump for the round bar, derived from pending
+// guesses that haven't yet landed on-chain. The server derives both pot and the
+// "players" count from the guess list (pot = Σ amounts, participants =
+// guesses.length), so each pending guess adds 1 to each — matching what the
+// authoritative state will report once the tx lands, so there's no jump on
+// reconcile.
+function optimisticRoundDelta(round) {
+  const pend = getPendingForRound(round)
+    .filter((p) => !((round.guesses || []).some((g) => g.from === myAddress && g.guess === p.guess)));
+  return { pot: pend.length, participants: pend.length };
+}
+
+function removePendingGuess(entry) {
+  const idx = pendingGuesses.indexOf(entry);
+  if (idx >= 0) pendingGuesses.splice(idx, 1);
+}
+
+// Drop pending entries the chain has caught up to (or that no longer apply),
+// so an optimistic row seamlessly becomes a normal confirmed row. Runs on every
+// render once gameState exists. In DEMO there is no chain to reconcile against,
+// so entries persist (and are shown as confirmed) until the round rolls.
+function reconcilePendingGuesses() {
+  if (!pendingGuesses.length || !gameState || !gameState.tracks) return;
+  const now = Date.now();
+  pendingGuesses = pendingGuesses.filter((p) => {
+    if (now - p.ts > PENDING_MAX_AGE_MS) return false;
+    if (p.status === 'timeout' && now - p.ts > PENDING_TIMEOUT_TTL_MS) return false;
+    const td = gameState.tracks[p.track];
+    const round = td && td.currentRound;
+    // Round rolled, ended, or vanished → the optimistic guess no longer applies.
+    if (!round || round.id !== p.roundId || round.endedAt) return false;
+    if (DEMO) return true; // never reconciled from chain in demo mode
+    // Authoritative guess present on-chain → reconciled; stop showing the dup.
+    const landed = (round.guesses || []).some((g) => g.from === myAddress && g.guess === p.guess);
+    return !landed;
+  });
 }
 
 function getMyBestGuess(round, myGuesses) {
@@ -1216,12 +1263,29 @@ async function placeGuess() {
   // Keep `sending` true through the confirmed flash so the poll loop's
   // updateGuessCard can't re-enable the button mid-lifecycle.
   setBtnState(guessBtn, 'pending', 'Confirming…');
+
+  // Optimistically register the guess the instant the player commits, BEFORE the
+  // bridge popup resolves, so it shows immediately as a dimmed "Placing…" row
+  // (and ticks the counter / pot / players). The send guard above prevents a
+  // double-push for the same in-flight tap; still dedupe by round + value so a
+  // recovered-from-stuck retry of the same number can't stack two rows.
+  let pendingEntry = pendingGuesses.find((p) =>
+    p.roundId === round.id && p.track === selectedTrack && p.guess === guess && p.status !== 'timeout');
+  if (!pendingEntry) {
+    pendingEntry = { roundId: round.id, track: selectedTrack, guess, ts: Date.now(), status: 'pending' };
+    pendingGuesses.push(pendingEntry);
+  } else {
+    pendingEntry.ts = Date.now();
+    pendingEntry.status = 'pending';
+  }
+  render();
+
   console.log('[placeGuess] opening bridge approval for guess', { round: round.id, guess, to: appPubkey });
   try {
     if (DEMO) {
       await demoHold();
     } else {
-      const result = await window.sendTransaction(appPubkey, 1, memoStr, {
+      await window.sendTransaction(appPubkey, 1, memoStr, {
         ...TX_SEND_OPTS,
         serverCacheUrl: '/__usernode/cache/' + appPubkey,
         confirmTitle: 'Lock in your guess',
@@ -1229,23 +1293,20 @@ async function placeGuess() {
           ? 'Guess #' + guess + ' — 1 token. You have ' + guessesLeft + ' guess' + (guessesLeft !== 1 ? 'es' : '') + ' remaining (each costs 1 token).'
           : 'Guess #' + guess + ' — 1 token entry fee. This cannot be changed.',
       });
-      // The hosted bridge waits for on-chain inclusion via /waitForTx and hands
-      // back the confirmed transaction. Read it defensively — the resolved shape
-      // is owned by the bridge and may carry no tx on its "queued" path. When we
-      // do have a confirmation, optimistically drop the guess into the active
-      // round so it shows instantly instead of waiting for the next poll to
-      // rediscover what we already know landed.
-      const confirmedTx = (result && typeof result === 'object' && result.tx &&
-        typeof result.tx === 'object') ? result.tx : null;
-      if (confirmedTx) applyOptimisticGuess(round.id, guess);
     }
-    // Tx is included — show the confirmed flash, then let normal render take over.
+    // The send resolved (the hosted bridge waits for on-chain inclusion via
+    // /waitForTx before doing so). Flip the optimistic row to confirmed so its
+    // spinner clears even before the next poll; reconcilePendingGuesses() drops
+    // it once the authoritative guess lands (in DEMO it stays as a confirmed
+    // row, since there's no chain to reconcile against).
+    pendingEntry.status = 'confirmed';
     setBtnState(guessBtn, 'confirmed', 'Guess locked in');
+    if (gameState) render();
     // Exactly one authoritative refresh to reconcile pot / participants /
-    // leaderboard. No 30s fast-poll burst: the bridge confirmation already
-    // told us the tx is in (and the same cache feeds /__numguess/state), so a
-    // single read is enough. The round-end fast-poll burst stays elsewhere.
-    if (!DEMO) await refreshState();
+    // leaderboard — fired but NOT awaited, so the button settles on its own
+    // timer regardless of refresh latency. No 30s fast-poll burst: the bridge
+    // confirmation already told us the tx is in. The round-end burst lives elsewhere.
+    if (!DEMO) refreshState();
     setTimeout(() => {
       setSending(false);
       setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
@@ -1257,12 +1318,18 @@ async function placeGuess() {
     const msg = e && e.message ? e.message : String(e);
     const low = msg.toLowerCase();
     if (low.includes('timeout')) {
+      // The tx may still confirm — keep the optimistic row (marked timeout) so a
+      // guess that does eventually land isn't erased from view.
+      pendingEntry.status = 'timeout';
       showError('Transaction timed out — it may still confirm. Check back shortly.');
     } else if (low.includes('declin') || low.includes('reject') || low.includes('cancel') || low.includes('denied')) {
+      removePendingGuess(pendingEntry);
       showError('Transaction declined — your guess was not placed.');
     } else {
+      removePendingGuess(pendingEntry);
       showError('Transaction failed: ' + msg);
     }
+    if (gameState) render();
   }
 }
 
@@ -1418,15 +1485,23 @@ async function refreshState() {
 
 function render() {
   if (!gameState || !gameState.tracks) return;
+  // Drop optimistic guesses the chain has caught up to (or that no longer
+  // apply) before deriving anything from them.
+  reconcilePendingGuesses();
   const td = gameState.tracks[selectedTrack] || {};
   const round = td.currentRound || null;
 
   // Round bar
   if (round) {
     document.getElementById('round-badge').textContent = 'Round ' + round.id;
+    // Bump pot / players for any optimistic guesses not yet on-chain, so the
+    // bar moves the instant a guess is placed.
+    const delta = optimisticRoundDelta(round);
+    const partDisp = round.participants + delta.participants;
+    const potDisp = round.pot + delta.pot;
     document.getElementById('players-info').textContent =
-      round.participants + ' player' + (round.participants !== 1 ? 's' : '') +
-      ' · ' + round.pot + ' token' + (round.pot !== 1 ? 's' : '');
+      partDisp + ' player' + (partDisp !== 1 ? 's' : '') +
+      ' · ' + potDisp + ' token' + (potDisp !== 1 ? 's' : '');
 
     const durationBadge = document.getElementById('duration-badge');
     const durMs = round.activeDurationMs;
@@ -1604,9 +1679,11 @@ function updateGuessCard(round, myGuesses, maxGuesses, allGuessesUsed) {
     myGuessesList.style.display = '';
     myGuessesList.innerHTML = '<div class="my-guesses-label">My guesses this round</div>' +
       myGuesses.map((g, i) =>
-        '<div class="my-guess-row">' +
+        '<div class="my-guess-row' + (g.pending ? ' is-pending' : '') + '">' +
+        (g.pending ? '<span class="my-guess-pending-dot"></span>' : '') +
         '<span class="my-guess-val">' + g.guess + '</span>' +
-        '<span class="my-guess-tag">Guess ' + (i + 1) + '</span>' +
+        '<span class="my-guess-tag' + (g.pending ? ' is-pending' : '') + '">' +
+        (g.pending ? 'Placing…' : 'Guess ' + (i + 1)) + '</span>' +
         '</div>'
       ).join('');
   } else {

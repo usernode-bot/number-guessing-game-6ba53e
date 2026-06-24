@@ -554,6 +554,18 @@ function injectStagingSeeds() {
     { id: 'staging-r62-g10', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 62, guess: 250 }), timestamp_ms: now - 43 * day + 10 * hour },
     { id: 'staging-r62-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 62, secret: 250, winner: p1, winner_guess: 250, pot: 10, participants: 3 }), timestamp_ms: now - 42 * day },
 
+    // Round 70 — IN-PROGRESS, 1h track, Medium (1–100), multi-guess (10).
+    // Deliberately has NO end_round and a recent start with a full 1h active
+    // window (endsAt ≈ now+48m), so it reads as the live 1h round. The boot
+    // auto-start sees this active round and skips creating another for 1h, so a
+    // reviewer landing on the 1h track sees a populated board (3 guesses from
+    // alice_s/bob_s/carol_s → 3 players · 3 tokens) to place a guess into and
+    // watch it appear instantly. Obviously-fake, IS_STAGING-only.
+    { id: 'staging-r70-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 70, seed_hash: '00000031' + '7'.repeat(56), active_duration_ms: 3600000, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1h', difficulty: 'medium' }), timestamp_ms: now - 12 * 60000 },
+    { id: 'staging-r70-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 70, guess: 42 }), timestamp_ms: now - 10 * 60000 },
+    { id: 'staging-r70-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 70, guess: 67 }), timestamp_ms: now - 8 * 60000 },
+    { id: 'staging-r70-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 70, guess: 23 }), timestamp_ms: now - 6 * 60000 },
+
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
     { id: 'staging-u2', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'bob_s' }), timestamp_ms: now - 3 * day },
