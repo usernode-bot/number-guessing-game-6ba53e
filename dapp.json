@@ -158,6 +158,31 @@
       "name": "Account badge markup is present in the header",
       "path": "/?demo=1",
       "expectSelector": "#account-badge"
+    },
+    {
+      "name": "Filtered usernames endpoint still serves visible players",
+      "path": "/__usernames/state",
+      "expectText": "dave_s"
+    },
+    {
+      "name": "Leaderboard tab loads with the blocked player filtered out",
+      "path": "/?demo=1",
+      "expectSelector": "#leaderboard-list"
+    },
+    {
+      "name": "Demo relay-timeout route loads the guess button without console errors",
+      "path": "/?demo=1&demoTimeout=1",
+      "expectSelector": "#guess-btn"
+    },
+    {
+      "name": "Leaderboard renders with only named Usernode players",
+      "path": "/?demo=1",
+      "expectSelector": "#leaderboard-list"
+    },
+    {
+      "name": "Usernames directory still serves a named seeded player",
+      "path": "/__usernames/state",
+      "expectText": "eve_s"
     }
   ]
 }
