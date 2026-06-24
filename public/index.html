@@ -65,24 +65,24 @@
 
   <style>
     :root {
-      --accent: #14b8a6;
-      --accent-light: #2dd4bf;
-      --accent-dark: #0d9488;
-      --accent-glow: rgba(20,184,166,0.30);
-      --accent-soft: rgba(20,184,166,0.12);
-      --accent-soft-border: rgba(20,184,166,0.28);
-      --bg: #0a0f1a;
-      --bg-grad: radial-gradient(120% 80% at 50% -10%, rgba(20,184,166,0.10) 0%, rgba(20,184,166,0) 55%);
-      --bg-elev: #111827;
-      --bg-card: #151d2c;
-      --bg-card-hover: #1b2638;
-      --text: #f1f5f9;
-      --text-muted: #93a4bd;
-      --text-faint: #4b5a72;
-      --border: rgba(148,163,184,0.14);
-      --border-strong: rgba(148,163,184,0.30);
-      --shadow: 0 10px 34px rgba(0,0,0,0.45);
-      --shadow-sm: 0 2px 14px rgba(0,0,0,0.28);
+      --accent: #7c3aed;
+      --accent-light: #a78bfa;
+      --accent-dark: #6d28d9;
+      --accent-glow: rgba(124,58,237,0.38);
+      --accent-soft: rgba(124,58,237,0.13);
+      --accent-soft-border: rgba(124,58,237,0.30);
+      --bg: #06070d;
+      --bg-grad: radial-gradient(130% 90% at 50% -5%, rgba(124,58,237,0.18) 0%, rgba(109,40,217,0.04) 50%, transparent 70%);
+      --bg-elev: #0d1021;
+      --bg-card: #131826;
+      --bg-card-hover: #192035;
+      --text: #dce6f5;
+      --text-muted: #7a8fb0;
+      --text-faint: #374155;
+      --border: rgba(100,130,200,0.14);
+      --border-strong: rgba(120,150,220,0.28);
+      --shadow: 0 10px 40px rgba(0,0,0,0.60);
+      --shadow-sm: 0 2px 16px rgba(0,0,0,0.35);
       --radius: 1.25rem;
       --radius-sm: 0.8rem;
       --nav-h: 64px;
@@ -91,24 +91,24 @@
       --maxw: 540px;
     }
     [data-theme="light"] {
-      --accent: #0d9488;
-      --accent-light: #14b8a6;
-      --accent-dark: #0f766e;
-      --accent-glow: rgba(13,148,136,0.22);
-      --accent-soft: rgba(13,148,136,0.10);
-      --accent-soft-border: rgba(13,148,136,0.25);
-      --bg: #eef2f7;
-      --bg-grad: radial-gradient(120% 80% at 50% -10%, rgba(13,148,136,0.10) 0%, rgba(13,148,136,0) 55%);
+      --accent: #7c3aed;
+      --accent-light: #6d28d9;
+      --accent-dark: #5b21b6;
+      --accent-glow: rgba(124,58,237,0.22);
+      --accent-soft: rgba(124,58,237,0.09);
+      --accent-soft-border: rgba(124,58,237,0.22);
+      --bg: #f0eef8;
+      --bg-grad: radial-gradient(130% 90% at 50% -5%, rgba(124,58,237,0.10) 0%, rgba(124,58,237,0) 55%);
       --bg-elev: #ffffff;
       --bg-card: #ffffff;
-      --bg-card-hover: #f1f5f9;
-      --text: #0f172a;
-      --text-muted: #5a6b82;
-      --text-faint: #b4c0d0;
-      --border: rgba(15,23,42,0.10);
-      --border-strong: rgba(15,23,42,0.18);
-      --shadow: 0 10px 30px rgba(15,23,42,0.10);
-      --shadow-sm: 0 2px 12px rgba(15,23,42,0.06);
+      --bg-card-hover: #f3f2fb;
+      --text: #1a1040;
+      --text-muted: #5b5585;
+      --text-faint: #bbb8d0;
+      --border: rgba(30,20,80,0.10);
+      --border-strong: rgba(30,20,80,0.18);
+      --shadow: 0 10px 30px rgba(30,20,80,0.10);
+      --shadow-sm: 0 2px 12px rgba(30,20,80,0.06);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 16px; -webkit-text-size-adjust: 100%; }
@@ -396,7 +396,7 @@
       border-top: 1px solid var(--border);
     }
     .hist-guess-row.is-winner { background: var(--accent-soft); }
-    .hist-guess-row.is-me { background: rgba(56,189,248,0.08); }
+    .hist-guess-row.is-me { background: rgba(124,58,237,0.09); }
     .hist-guess-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hist-guess-val { font-weight: 800; font-variant-numeric: tabular-nums; }
     .hist-guess-dist { font-size: .72rem; color: var(--text-muted); }
@@ -410,14 +410,14 @@
       display: flex; gap: .5rem; margin-bottom: .85rem;
     }
     .mygames-summary .mg-stat {
-      flex: 1; background: var(--card); border: 1px solid var(--border);
+      flex: 1; background: var(--bg-card); border: 1px solid var(--border);
       border-radius: var(--radius); padding: .7rem .5rem; text-align: center;
     }
     .mygames-summary .mg-stat strong { display: block; font-size: 1.15rem; font-weight: 800; color: var(--accent-light); }
     .mygames-summary .mg-stat small { display: block; font-size: .68rem; color: var(--text-muted); margin-top: .15rem; text-transform: uppercase; letter-spacing: .03em; }
     .mg-row {
       display: flex; align-items: center; gap: .75rem;
-      background: var(--card); border: 1px solid var(--border);
+      background: var(--bg-card); border: 1px solid var(--border);
       border-radius: var(--radius); padding: .7rem .85rem; margin-bottom: .5rem;
     }
     .mg-row.is-winner { border-color: var(--accent); }
@@ -455,7 +455,7 @@
     /* ---- Modals ---- */
     .modal-overlay {
       display: none; position: fixed; inset: 0; z-index: 300;
-      background: rgba(2,6,16,0.62); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      background: rgba(3,4,12,0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
       align-items: flex-end; justify-content: center;
     }
     .modal-overlay.open { display: flex; }
@@ -519,7 +519,7 @@
     /* ---- Reconnect bar ---- */
     .reconnect-bar {
       display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 500;
-      background: #854d0e; color: #fef9c3; text-align: center;
+      background: #92400e; color: #fef3c7; text-align: center;
       font-size: .8rem; padding: calc(.4rem + var(--safe-t)) .4rem .4rem; font-weight: 700;
     }
     .reconnect-bar.show { display: block; }
