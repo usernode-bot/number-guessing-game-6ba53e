@@ -12,6 +12,11 @@ function createGame(opts) {
   const timerDurationMs = opts.timerDurationMs || 86400000;
   const minPlayers = opts.minPlayers || 2;
 
+  // Players hidden from all public views. Filtered at this derivation layer so
+  // every surface (leaderboard, history winner credit, result cards) inherits
+  // the hide from one place. Defaults to a no-op when not supplied.
+  const isHidden = typeof opts.isHidden === 'function' ? opts.isHidden : () => false;
+
   // rounds keyed by round_id
   const rounds = new Map();
   // Set of processed tx IDs (dedup)
@@ -194,17 +199,20 @@ function createGame(opts) {
       if (r.durationTrack !== track) continue;
       const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
       const w = r.winner;
-      if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
-      stats[w].won++;
-      stats[w].tokensWon += r.pot || 0;
-      if (secret != null && r.winnerGuess != null) {
-        stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+      if (!isHidden(w)) {
+        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        stats[w].won++;
+        stats[w].tokensWon += r.pot || 0;
+        if (secret != null && r.winnerGuess != null) {
+          stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+        }
+        const winGuessCount = r.rawGuessCounts ? (r.rawGuessCounts[w] || 1) : 1;
+        stats[w].bestWinGuessCount = stats[w].bestWinGuessCount === null
+          ? winGuessCount
+          : Math.min(stats[w].bestWinGuessCount, winGuessCount);
       }
-      const winGuessCount = r.rawGuessCounts ? (r.rawGuessCounts[w] || 1) : 1;
-      stats[w].bestWinGuessCount = stats[w].bestWinGuessCount === null
-        ? winGuessCount
-        : Math.min(stats[w].bestWinGuessCount, winGuessCount);
       for (const g of r.guesses) {
+        if (isHidden(g.from)) continue;
         if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
         if (secret != null) {
           stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
@@ -224,17 +232,20 @@ function createGame(opts) {
       if ((r.difficulty || 'medium') !== difficulty) continue;
       const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
       const w = r.winner;
-      if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
-      stats[w].won++;
-      stats[w].tokensWon += r.pot || 0;
-      if (secret != null && r.winnerGuess != null) {
-        stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+      if (!isHidden(w)) {
+        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        stats[w].won++;
+        stats[w].tokensWon += r.pot || 0;
+        if (secret != null && r.winnerGuess != null) {
+          stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+        }
+        const winGuessCount = r.rawGuessCounts ? (r.rawGuessCounts[w] || 1) : 1;
+        stats[w].bestWinGuessCount = stats[w].bestWinGuessCount === null
+          ? winGuessCount
+          : Math.min(stats[w].bestWinGuessCount, winGuessCount);
       }
-      const winGuessCount = r.rawGuessCounts ? (r.rawGuessCounts[w] || 1) : 1;
-      stats[w].bestWinGuessCount = stats[w].bestWinGuessCount === null
-        ? winGuessCount
-        : Math.min(stats[w].bestWinGuessCount, winGuessCount);
       for (const g of r.guesses) {
+        if (isHidden(g.from)) continue;
         if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
         if (secret != null) {
           stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
@@ -279,12 +290,15 @@ function createGame(opts) {
 
     for (const r of completed) {
       if (!r.winner) continue; // no-winner rounds leave every streak untouched
+      // A hidden winner is treated like a no-winner round for streak purposes:
+      // they earn no credit and other participants are not reset by them.
+      if (isHidden(r.winner)) continue;
       const w = ensure(r.winner);
       w.currentStreak += 1;
       if (w.currentStreak > w.bestStreak) w.bestStreak = w.currentStreak;
       const participants = new Set(r.guesses.map((g) => g.from));
       for (const p of participants) {
-        if (p === r.winner) continue;
+        if (p === r.winner || isHidden(p)) continue;
         ensure(p).currentStreak = 0;
       }
     }
@@ -334,13 +348,16 @@ function createGame(opts) {
       if (!r.endedAt || !r.winner) continue;
       const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
       const w = r.winner;
-      if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity };
-      stats[w].won++;
-      stats[w].tokensWon += r.pot || 0;
-      if (secret != null && r.winnerGuess != null) {
-        stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+      if (!isHidden(w)) {
+        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity };
+        stats[w].won++;
+        stats[w].tokensWon += r.pot || 0;
+        if (secret != null && r.winnerGuess != null) {
+          stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+        }
       }
       for (const g of r.guesses) {
+        if (isHidden(g.from)) continue;
         if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity };
         if (secret != null) {
           stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
@@ -358,6 +375,9 @@ function createGame(opts) {
   // ---------------------------------------------------------------------------
 
   function buildCurrentRoundData(round) {
+    // Drop hidden players' guesses so they never surface as participants; the
+    // pot/participant count is recomputed from the visible guesses.
+    const visibleGuesses = round.guesses.filter((g) => !isHidden(g.from));
     return {
       id: round.id,
       startedAt: round.startedAt,
@@ -369,14 +389,18 @@ function createGame(opts) {
       durationTrack: round.durationTrack,
       difficulty: round.difficulty || 'medium',
       range: round.range || 100,
-      participants: round.guesses.length,
-      pot: round.guesses.reduce((s, g) => s + g.amount, 0),
-      guesses: round.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
+      participants: visibleGuesses.length,
+      pot: visibleGuesses.reduce((s, g) => s + g.amount, 0),
+      guesses: visibleGuesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
       endedAt: null,
     };
   }
 
   function buildPastRoundData(r) {
+    // A hidden winner loses their winner credit (the round reads as winnerless),
+    // and hidden players' guesses are dropped from the per-round guess list so
+    // history and result cards never name them.
+    const winnerHidden = isHidden(r.winner);
     return {
       id: r.id,
       startedAt: r.startedAt,
@@ -384,8 +408,8 @@ function createGame(opts) {
       activeDurationMs: r.activeDurationMs,
       endedAt: r.endedAt,
       secret: r.secret,
-      winner: r.winner,
-      winnerGuess: r.winnerGuess,
+      winner: winnerHidden ? null : r.winner,
+      winnerGuess: winnerHidden ? null : r.winnerGuess,
       pot: r.pot,
       participants: r.participants,
       mode: r.mode,
@@ -393,7 +417,7 @@ function createGame(opts) {
       difficulty: r.difficulty || 'medium',
       range: r.range || 100,
       maxGuessesPerPlayer: r.maxGuessesPerPlayer,
-      guesses: r.guesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
+      guesses: r.guesses.filter((g) => !isHidden(g.from)).map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
     };
   }
 
