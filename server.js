@@ -14,7 +14,7 @@ const {
   createNodeStatusProbe,
   EXPLORER_PROXY_PREFIX,
 } = require('./lib/dapp-server');
-const { createGame, DIFFICULTIES } = require('./game-logic');
+const { createGame, DIFFICULTIES, computeRoundScore } = require('./game-logic');
 const db = require('./lib/db');
 const hidden = require('./lib/hidden-users');
 
@@ -67,12 +67,12 @@ const STAGING_DEMO_RESULTS = (() => {
   const hour = 3600000;
   const day = 86400000;
   return [
-    { round_id: 62, track: '1d', difficulty: 'hard',   num_guesses: 10, won: true,  outcome: 'won',  best_guess: 250, best_distance: 0, secret: 250, pot: 10, ended_at: now - 2 * day },
-    { round_id: 50, track: '1d', difficulty: 'easy',   num_guesses: 1,  won: true,  outcome: 'won',  best_guess: 5,   best_distance: 0, secret: 5,   pot: 3,  ended_at: now - 1 * day },
-    { round_id: 8,  track: '1h', difficulty: 'medium', num_guesses: 1,  won: true,  outcome: 'won',  best_guess: 50,  best_distance: 0, secret: 50,  pot: 2,  ended_at: now - 6 * hour },
-    { round_id: 23, track: '1w', difficulty: 'medium', num_guesses: 4,  won: false, outcome: 'lost', best_guess: 47,  best_distance: 2, secret: 45,  pot: 0,  ended_at: now - 3 * day },
-    { round_id: 5,  track: '1h', difficulty: 'medium', num_guesses: 3,  won: false, outcome: 'lost', best_guess: 60,  best_distance: 1, secret: 61,  pot: 0,  ended_at: now - 12 * hour },
-    { round_id: 12, track: '6h', difficulty: 'easy',   num_guesses: 2,  won: false, outcome: 'lost', best_guess: 8,   best_distance: 2, secret: 6,   pot: 0,  ended_at: now - 4 * hour },
+    { round_id: 62, track: '1d', difficulty: 'hard',   num_guesses: 10, won: true,  outcome: 'won',  best_guess: 250, best_distance: 0, secret: 250, pot: 10, score: 12000, ended_at: now - 2 * day },
+    { round_id: 50, track: '1d', difficulty: 'easy',   num_guesses: 1,  won: true,  outcome: 'won',  best_guess: 5,   best_distance: 0, secret: 5,   pot: 3,  score: 1000,  ended_at: now - 1 * day },
+    { round_id: 8,  track: '1h', difficulty: 'medium', num_guesses: 1,  won: true,  outcome: 'won',  best_guess: 50,  best_distance: 0, secret: 50,  pot: 2,  score: 6000,  ended_at: now - 6 * hour },
+    { round_id: 23, track: '1w', difficulty: 'medium', num_guesses: 4,  won: false, outcome: 'lost', best_guess: 47,  best_distance: 2, secret: 45,  pot: 0,  score: 0,     ended_at: now - 3 * day },
+    { round_id: 5,  track: '1h', difficulty: 'medium', num_guesses: 3,  won: false, outcome: 'lost', best_guess: 60,  best_distance: 1, secret: 61,  pot: 0,  score: 0,     ended_at: now - 12 * hour },
+    { round_id: 12, track: '6h', difficulty: 'easy',   num_guesses: 2,  won: false, outcome: 'lost', best_guess: 8,   best_distance: 2, secret: 6,   pot: 0,  score: 0,     ended_at: now - 4 * hour },
   ];
 })();
 
@@ -102,6 +102,7 @@ function collectUserResults(pubkey) {
     const won = r.winner === pubkey;
     const outcome = won ? 'won' : (r.winner ? 'lost' : 'no_winner');
     const numGuesses = r.rawGuessCounts ? (r.rawGuessCounts[pubkey] || mine.length) : mine.length;
+    const score = computeRoundScore(r.difficulty || 'medium', numGuesses, won, won ? bestDist : null);
 
     out.push({
       round_id: r.id,
@@ -114,6 +115,7 @@ function collectUserResults(pubkey) {
       best_distance: bestDist,
       secret,
       pot: won ? (r.pot != null ? r.pot : 0) : 0,
+      score,
       ended_at: r.endedAt || null,
     });
   }
@@ -125,7 +127,9 @@ function computeHistoryStats(results) {
   const played = results.length;
   const wins = results.filter((r) => r.won).length;
   const winRate = played ? Math.round((wins / played) * 100) : 0;
-  return { played, wins, winRate };
+  const totalScore = results.reduce((sum, r) => sum + (r.score || 0), 0);
+  const bestRoundScore = results.reduce((max, r) => Math.max(max, r.score || 0), 0);
+  return { played, wins, winRate, totalScore, bestRoundScore };
 }
 
 // ---------------------------------------------------------------------------
