@@ -178,19 +178,36 @@ app.use((req, res, next) => {
 // Game setup
 // ---------------------------------------------------------------------------
 
+// Snapshot of the live usernames directory (pubkey -> custom name), refreshed
+// by syncHiddenFromUsernames() before every public state read. The hide
+// predicate closes over this rather than rebuilding it per pubkey.
+let usernameMapCache = Object.create(null);
+
+// A player is hidden from every public view when EITHER:
+//   - they are on the explicit block-list (e.g. user_vedge), OR
+//   - they have NOT set a real Usernode username — i.e. their pubkey is absent
+//     from the usernames directory, so their name would only ever be the
+//     auto-generated `user_<last6>` fallback.
+// Only players with a real, custom-set username appear anywhere others can see.
+function isHiddenFromPublic(pubkey) {
+  if (hidden.isHiddenPubkey(pubkey)) return true;
+  return !usernameMapCache[pubkey];
+}
+
 const game = createGame({
   appPubkey: APP_PUBKEY,
   timerDurationMs: TIMER_DURATION_MS,
   minPlayers: MIN_PLAYERS,
-  // Filter blocked players out of all chain-derived public state.
-  isHidden: hidden.isHiddenPubkey,
+  // Filter blocked + unnamed players out of all chain-derived public state.
+  isHidden: isHiddenFromPublic,
 });
 
-// Resolve any hide-by-username entries to their pubkeys from the live usernames
-// cache, so the pubkey-keyed game state can filter them too. Cheap + idempotent;
-// called before each public state read so it self-heals as set_username txs land.
+// Refresh the usernames snapshot and resolve any hide-by-username entries to
+// their pubkeys. Cheap + idempotent; called before each public state read so it
+// self-heals as set_username txs land. Returns the pubkey -> name map.
 function syncHiddenFromUsernames() {
   const map = (usernamesCache.getStateResponse() || {}).usernames || {};
+  usernameMapCache = map;
   hidden.resolveHiddenFromUsernameMap(map);
   return map;
 }
@@ -279,6 +296,11 @@ function injectStagingSeeds() {
   // so the leaderboard WOULD rank them #1; the hidden-users filter must remove
   // them. Verifies the hide end-to-end (see rounds 40/41 + username u12 below).
   const p12 = 'utpk1stagingplayer00000000000000000000000000000000000000000c';
+  // p13 has NEVER set a Usernode username, so their resolved name is only the
+  // auto-generated user_<last6> fallback. Seeded with a prominent 1-guess win
+  // (round 42) so they WOULD top the leaderboard — but the "named players only"
+  // filter must exclude them. Intentionally has no set_username seed tx.
+  const p13 = 'utpk1stagingplayer00000000000000000000000000000000000000000d';
 
   // Round 4: TIMED + HARD MODE — 2-minute timer started 2 hours ago → already expired on boot.
   const r4StartMs = now - 2 * hour;
@@ -592,6 +614,18 @@ function injectStagingSeeds() {
     { id: 'staging-r41-g2', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 41, guess: 38 }), timestamp_ms: now - 17 * day + 2 * hour },
     { id: 'staging-r41-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 41, guess: 50 }), timestamp_ms: now - 17 * day + 3 * hour },
     { id: 'staging-r41-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 41, secret: 42, winner: p12, winner_guess: 42, pot: 3, participants: 3 }), timestamp_ms: now - 16 * day },
+
+    // ---- UNNAMED PLAYER FIXTURE (p13 — no Usernode username) ----
+    // A bullseye 1-guess win that WOULD make p13 the top medium-difficulty entry.
+    // Because p13 never set a username (no u13 below), the "named players only"
+    // filter must keep them off the leaderboard and out of history winner credit,
+    // while named players (dave_s, eve_s, …) remain.
+    // Round 42 — 1d — medium — secret=50 — p13 wins with 1 guess (bullseye)
+    { id: 'staging-r42-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 42, seed_hash: '00000031' + '6'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d', difficulty: 'medium' }), timestamp_ms: now - 16 * day },
+    { id: 'staging-r42-g1', to: APP_PUBKEY, from_pubkey: p13, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 42, guess: 50 }), timestamp_ms: now - 16 * day + hour },
+    { id: 'staging-r42-g2', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 42, guess: 44 }), timestamp_ms: now - 16 * day + 2 * hour },
+    { id: 'staging-r42-g3', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 42, guess: 58 }), timestamp_ms: now - 16 * day + 3 * hour },
+    { id: 'staging-r42-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 42, secret: 50, winner: p13, winner_guess: 50, pot: 3, participants: 3 }), timestamp_ms: now - 15 * day },
 
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
@@ -1128,6 +1162,10 @@ async function start() {
   await numguessCache.start();
   await usernamesCache.start();
   nodeStatusProbe.start();
+
+  // Prime the usernames snapshot so the hide-the-unnamed predicate is correct
+  // even for any state derivation that happens before the first public read.
+  syncHiddenFromUsernames();
 
   // After stream backfill, ensure all 4 tracks have an active round
   setTimeout(async () => {

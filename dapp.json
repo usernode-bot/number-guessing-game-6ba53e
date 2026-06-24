@@ -168,6 +168,16 @@
       "name": "Demo relay-timeout route loads the guess button without console errors",
       "path": "/?demo=1&demoTimeout=1",
       "expectSelector": "#guess-btn"
+    },
+    {
+      "name": "Leaderboard renders with only named Usernode players",
+      "path": "/?demo=1",
+      "expectSelector": "#leaderboard-list"
+    },
+    {
+      "name": "Usernames directory still serves a named seeded player",
+      "path": "/__usernames/state",
+      "expectText": "eve_s"
     }
   ]
 }
