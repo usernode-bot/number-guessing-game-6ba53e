@@ -175,6 +175,11 @@
       "expectSelector": "#guess-btn"
     },
     {
+      "name": "Relay-timeout recovery still confirms the guess (locked in)",
+      "path": "/?demo=1&demoTimeout=1&demoAutoGuess=1",
+      "expectText": "Your guess is locked in"
+    },
+    {
       "name": "Leaderboard renders with only named Usernode players",
       "path": "/?demo=1",
       "expectSelector": "#leaderboard-list"

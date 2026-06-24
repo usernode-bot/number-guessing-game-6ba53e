@@ -773,7 +773,16 @@
 <script>
 'use strict';
 
-const TX_SEND_OPTS = { timeoutMs: 180000, pollIntervalMs: 1500 };
+// Client-side soft-timeout for a guess send. Kept well under the server-side
+// /waitForTx ceiling (180s) so the UI pivots to its own chain-state
+// reconciliation (awaitGuessConfirmed) within ~20s instead of leaving the
+// player staring at a spinner for three minutes.
+const TX_SEND_OPTS = { timeoutMs: 20000, pollIntervalMs: 1500 };
+// After a send resolves without a tx (queued) or times out, poll the
+// chain-derived /__numguess/state for up to this long, checking whether the
+// guess actually landed, before deciding it's genuinely unconfirmed.
+const GUESS_RECONCILE_MS = 18000;
+const GUESS_RECONCILE_INTERVAL_MS = 1500;
 const GAME_POLL_MS = 4000;
 const FAST_POLL_MS = 1000;
 const FAST_POLL_DURATION = 30000;
@@ -1230,13 +1239,89 @@ function getMyBestGuess(round, myGuesses) {
   }, null);
 }
 
+// ---- Guess confirmation / reconciliation ----
+// True once a guess with this value from the signed-in player is present in the
+// chain-derived state for the given round. Scans every track (the player may
+// have switched tracks while the bridge popup was open) and keys on
+// from === myAddress so another player's identical guess can't false-confirm.
+function guessLanded(roundId, value) {
+  if (!myAddress || !gameState || !gameState.tracks) return false;
+  for (const t of TRACKS) {
+    const td = gameState.tracks[t];
+    const round = td && td.currentRound;
+    if (round && round.id === roundId && Array.isArray(round.guesses)) {
+      if (round.guesses.some((g) => g && g.from === myAddress && g.guess === value)) return true;
+    }
+  }
+  return false;
+}
+
+// Bounded reconciliation: treat /__numguess/state as the source of truth for
+// "did my guess land?", decoupled from whether the bridge promise resolved.
+// Polls refreshState() until the guess appears or `deadline` passes. Never
+// resubmits — it only observes. In DEMO mode there is no server to poll, so we
+// simulate the guess landing by applying it optimistically, which lets the
+// recovery path be exercised end-to-end via ?demoTimeout=1.
+async function awaitGuessConfirmed(roundId, value, deadline) {
+  if (DEMO) {
+    applyOptimisticGuess(roundId, value);
+    return guessLanded(roundId, value);
+  }
+  if (guessLanded(roundId, value)) return true;
+  while (Date.now() < deadline) {
+    try { await refreshState(); } catch {}
+    if (guessLanded(roundId, value)) return true;
+    await new Promise((r) => setTimeout(r, GUESS_RECONCILE_INTERVAL_MS));
+  }
+  return guessLanded(roundId, value);
+}
+
+// DEMO-only: guesses placed this session. Real chain state never contains them,
+// so the poll loop's refreshState() would wipe the optimistic patch — we re-apply
+// these after each demo refresh so the confirmed state stays visible (and the
+// recovery flow is screenshot-/check-testable end to end). No-op in production.
+let demoGuesses = [];
+
+// Flip the guess button into its confirmed flash, drop the guess in optimistically
+// (idempotent) and clear any soft warning / reconnect bar.
+function markGuessConfirmed(btn, roundId, value) {
+  applyOptimisticGuess(roundId, value);
+  if (DEMO && !demoGuesses.some((d) => d.roundId === roundId && d.value === value)) {
+    demoGuesses.push({ roundId: roundId, value: value });
+  }
+  clearErrors();
+  document.getElementById('reconnect-bar').classList.remove('show');
+  setBtnState(btn, 'confirmed', 'Guess locked in');
+}
+
+// Re-apply any demo guesses onto the freshly-fetched gameState (DEMO only).
+function reapplyDemoGuesses() {
+  if (!DEMO || !demoGuesses.length) return;
+  for (const d of demoGuesses) applyOptimisticGuess(d.roundId, d.value);
+}
+
+// The outcome is genuinely unknown after reconciliation: reassure the player,
+// keep the fast-poll recovery burst running so a late-confirmed guess still
+// surfaces on its own, and reset the button. Never resubmit (double-spend risk).
+function guessSoftTimeout(btn) {
+  setSending(false);
+  setBtnState(btn, 'idle', 'Place Guess — 1 token');
+  showError('Taking longer than expected to confirm — it may still go through. Check back in a moment.');
+  fastPollEnd = Date.now() + FAST_POLL_DURATION;
+  document.getElementById('reconnect-bar').classList.add('show');
+  if (!DEMO) { refreshState().catch(() => {}); scheduleNextPoll(); }
+}
+
 // ---- Guess action ----
 async function placeGuess() {
   // Never silently swallow a tap. If a previous send is genuinely still in
   // flight, say so; if it looks wedged (promise never settled past the tx
   // timeout), recover instead of disabling the button forever.
   if (sending) {
-    if (Date.now() - sendStartedAt > TX_SEND_OPTS.timeoutMs + 5000) {
+    // A send now spans the bridge wait AND the post-send chain reconciliation, so
+    // only treat it as wedged once both windows have elapsed — otherwise a re-tap
+    // during reconciliation could double-submit (and double-spend).
+    if (Date.now() - sendStartedAt > TX_SEND_OPTS.timeoutMs + GUESS_RECONCILE_MS + 5000) {
       console.warn('[placeGuess] previous send appears stuck — resetting send state');
       setSending(false);
     } else {
@@ -1282,9 +1367,16 @@ async function placeGuess() {
   setBtnState(guessBtn, 'pending', 'Confirming…');
   console.log('[placeGuess] opening bridge approval for guess', { round: round.id, guess, to: appPubkey });
   try {
+    // `confirmed` gates the success flash. It's true only when we KNOW the guess
+    // landed — either the bridge handed back a tx, or chain-state reconciliation
+    // found it. A bare "promise resolved" is not enough (the bridge has a queued
+    // path that resolves with no tx).
+    let confirmed = false;
     if (DEMO) {
       if (demoForceTimeout) await demoRelayTimeout();
       await demoHold();
+      // Demo "lands" the guess by reconciling against the optimistic patch.
+      confirmed = await awaitGuessConfirmed(round.id, guess, Date.now() + GUESS_RECONCILE_MS);
     } else {
       const result = await window.sendTransaction(appPubkey, 1, memoStr, {
         ...TX_SEND_OPTS,
@@ -1298,40 +1390,61 @@ async function placeGuess() {
       // back the confirmed transaction. Read it defensively — the resolved shape
       // is owned by the bridge and may carry no tx on its "queued" path. When we
       // do have a confirmation, optimistically drop the guess into the active
-      // round so it shows instantly instead of waiting for the next poll to
-      // rediscover what we already know landed.
+      // round so it shows instantly.
       const confirmedTx = (result && typeof result === 'object' && result.tx &&
         typeof result.tx === 'object') ? result.tx : null;
-      if (confirmedTx) applyOptimisticGuess(round.id, guess);
+      if (confirmedTx) {
+        applyOptimisticGuess(round.id, guess);
+        confirmed = true;
+      } else {
+        // Queued path: the bridge resolved but didn't vouch for inclusion. Don't
+        // flash a premature confirmation — reconcile against chain-derived state
+        // and only confirm once the guess actually appears.
+        confirmed = await awaitGuessConfirmed(round.id, guess, Date.now() + GUESS_RECONCILE_MS);
+      }
     }
-    // Tx is included — show the confirmed flash, then let normal render take over.
-    setBtnState(guessBtn, 'confirmed', 'Guess locked in');
-    // Exactly one authoritative refresh to reconcile pot / participants /
-    // leaderboard. No 30s fast-poll burst: the bridge confirmation already
-    // told us the tx is in (and the same cache feeds /__numguess/state), so a
-    // single read is enough. The round-end fast-poll burst stays elsewhere.
-    if (!DEMO) await refreshState();
-    setTimeout(() => {
-      setSending(false);
-      setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
-      if (gameState) render();
-    }, 900);
+    if (confirmed) {
+      // Tx is included — show the confirmed flash, then let normal render take over.
+      markGuessConfirmed(guessBtn, round.id, guess);
+      // One authoritative refresh to reconcile pot / participants / leaderboard.
+      if (!DEMO) await refreshState();
+      setTimeout(() => {
+        setSending(false);
+        setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
+        if (gameState) render();
+      }, 900);
+    } else {
+      // Landed-unknown even after reconciliation — keep the cautious message.
+      guessSoftTimeout(guessBtn);
+    }
   } catch (e) {
-    setSending(false);
-    setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
     const msg = e && e.message ? e.message : String(e);
     const low = msg.toLowerCase();
     if (isRelayTimeout(msg)) {
-      // Soft timeout: the guess may well have landed. Don't resubmit (that would
-      // risk a double token spend) — instead reassure the player and kick off the
-      // existing fast-poll burst so a confirmed guess appears on its own.
-      showError('Taking longer than expected to confirm — it may still go through. Check back in a moment.');
-      fastPollEnd = Date.now() + FAST_POLL_DURATION;
-      document.getElementById('reconnect-bar').classList.add('show');
-      if (!DEMO) { refreshState().catch(() => {}); scheduleNextPoll(); }
+      // Soft timeout: the guess may well have landed but the confirmation poll
+      // never came back. Before showing a scary message, actively reconcile
+      // against chain-derived state — the common case is that it DID land.
+      // Keep `sending` true through reconciliation so a re-tap can't double-spend.
+      const ok = await awaitGuessConfirmed(round.id, guess, Date.now() + GUESS_RECONCILE_MS);
+      if (ok) {
+        markGuessConfirmed(guessBtn, round.id, guess);
+        if (!DEMO) await refreshState();
+        setTimeout(() => {
+          setSending(false);
+          setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
+          if (gameState) render();
+        }, 900);
+      } else {
+        // Genuinely unknown: reassure, keep recovery polling, never resubmit.
+        guessSoftTimeout(guessBtn);
+      }
     } else if (low.includes('declin') || low.includes('reject') || low.includes('cancel') || low.includes('denied')) {
+      setSending(false);
+      setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
       showError('Transaction declined — your guess was not placed.');
     } else {
+      setSending(false);
+      setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
       showError('Transaction failed: ' + msg);
     }
   }
@@ -1517,6 +1630,9 @@ async function refreshState() {
     }
 
     maybeActivateDemo();
+    // Keep demo guesses visible across polls — chain-derived demo state never
+    // carries them, so without this the poll loop would wipe a confirmed guess.
+    reapplyDemoGuesses();
     render();
     document.getElementById('reconnect-bar').classList.remove('show');
   } catch (e) {
@@ -2005,6 +2121,11 @@ async function init() {
   // confirms USERNODE_ENV=staging (see maybeActivateDemo / refreshState).
   wantDemo = params.get('demo') === '1';
   demoForceTimeout = params.get('demoTimeout') === '1';
+  // Staging/demo-only: ?demoAutoGuess=1 auto-places one guess shortly after load
+  // so the submit→confirm flow (and the ?demoTimeout=1 recovery path) runs during
+  // the headless proposal checks, which navigate but never click. No-op unless
+  // demo mode actually activates (staging) and an active round is present.
+  const wantDemoAutoGuess = params.get('demoAutoGuess') === '1';
 
   try {
     // No client-side chain bootstrap needed: the hosted bridge discovers the
@@ -2033,6 +2154,21 @@ async function init() {
 
   scheduleNextPoll();
   countdownTimer = setInterval(tickCountdown, 1000);
+
+  if (wantDemoAutoGuess) {
+    // Poll until demo mode + wallet + an active round are ready, then fire one
+    // guess. demoForceTimeout (if also set) routes through the relay-timeout +
+    // reconciliation recovery, which should still end at "locked in".
+    let tries = 0;
+    const tick = () => {
+      if (DEMO && loggedIn && getActiveRound() && !getActiveRound().endedAt) {
+        placeGuess();
+        return;
+      }
+      if (++tries < 40) setTimeout(tick, 250);
+    };
+    setTimeout(tick, 300);
+  }
 }
 
 init();
