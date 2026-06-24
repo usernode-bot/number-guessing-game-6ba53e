@@ -150,6 +150,11 @@
       "expectText": "alice_s"
     },
     {
+      "name": "Demo account identity carries a wallet pubkey for history matching",
+      "path": "/api/me?demo=1",
+      "expectText": "utpk1stagingplayer"
+    },
+    {
       "name": "Account badge markup is present in the header",
       "path": "/?demo=1",
       "expectSelector": "#account-badge"
