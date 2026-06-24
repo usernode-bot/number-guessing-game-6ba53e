@@ -797,8 +797,17 @@ let countdownTimer = null;
 // confirmed lifecycle is observable without a live wallet / explorer round-trip.
 let wantDemo = false;
 let DEMO = false;
+// ?demoTimeout=1 (staging/demo only) forces demo sends to simulate a relay
+// timeout, so the graceful-recovery path can be screenshotted/tested.
+let demoForceTimeout = false;
 const DEMO_HOLD_MS = 2500;
 const DEMO_ADDR = 'utpk1demoplayer0000000000000000000000000000000000000000demo01';
+// Defensive, belt-and-suspenders mirror of the server-side block-list. The
+// authoritative hide happens server-side (chain-derived state + the usernames
+// directory both omit blocked players); this guard only ensures a blocked name
+// never renders even if a stale cache still holds it.
+const HIDDEN_USERNAMES = new Set(['user_vedge']);
+function isHiddenName(name) { return !!name && HIDDEN_USERNAMES.has(name); }
 const prevEndedAt = { '1h': null, '6h': null, '1d': null, '1w': null };
 let prevStreakValue = -1;
 let prevCountdownRemaining = Infinity;
@@ -930,6 +939,35 @@ function setBtnState(btn, state, label) {
 
 function demoHold() {
   return new Promise((resolve) => setTimeout(resolve, DEMO_HOLD_MS));
+}
+
+// Classify a send error as a soft relay/confirmation timeout — the request was
+// dispatched to the wallet bridge but no confirmation came back in time, so the
+// tx MAY still land. The hosted bridge phrases this several ways ("Usernode
+// relay timed out", "parent page never responded"), none of which contain the
+// bare substring "timeout" — so a naive includes('timeout') check misses them
+// and the player sees a scary hard failure. Match the whole family here.
+function isRelayTimeout(msg) {
+  const low = String(msg || '').toLowerCase();
+  return (
+    low.includes('timeout') ||
+    low.includes('timed out') ||
+    low.includes('relay') ||
+    low.includes('never responded') ||
+    low.includes('parent page')
+  );
+}
+
+// Staging/demo aid: ?demoTimeout=1 makes the next demo send simulate exactly the
+// relay-timeout family above, so the calm-recovery path is exercisable without a
+// live bridge. No-op outside demo mode; never affects real sends.
+function demoRelayTimeout() {
+  return new Promise((_resolve, reject) =>
+    setTimeout(
+      () => reject(new Error('Usernode relay timed out (parent page never responded)')),
+      DEMO_HOLD_MS
+    )
+  );
 }
 
 // Activate demo mode once the server confirms we're in staging. Idempotent.
@@ -1233,6 +1271,7 @@ async function placeGuess() {
   console.log('[placeGuess] opening bridge approval for guess', { round: round.id, guess, to: appPubkey });
   try {
     if (DEMO) {
+      if (demoForceTimeout) await demoRelayTimeout();
       await demoHold();
     } else {
       const result = await window.sendTransaction(appPubkey, 1, memoStr, {
@@ -1270,8 +1309,14 @@ async function placeGuess() {
     setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
     const msg = e && e.message ? e.message : String(e);
     const low = msg.toLowerCase();
-    if (low.includes('timeout')) {
-      showError('Transaction timed out — it may still confirm. Check back shortly.');
+    if (isRelayTimeout(msg)) {
+      // Soft timeout: the guess may well have landed. Don't resubmit (that would
+      // risk a double token spend) — instead reassure the player and kick off the
+      // existing fast-poll burst so a confirmed guess appears on its own.
+      showError('Taking longer than expected to confirm — it may still go through. Check back in a moment.');
+      fastPollEnd = Date.now() + FAST_POLL_DURATION;
+      document.getElementById('reconnect-bar').classList.add('show');
+      if (!DEMO) { refreshState().catch(() => {}); scheduleNextPoll(); }
     } else if (low.includes('declin') || low.includes('reject') || low.includes('cancel') || low.includes('denied')) {
       showError('Transaction declined — your guess was not placed.');
     } else {
@@ -1309,6 +1354,7 @@ async function saveUsername() {
   try {
     let saved;
     if (DEMO) {
+      if (demoForceTimeout) await demoRelayTimeout();
       await demoHold();
       saved = raw + (myAddress ? '_' + myAddress.slice(-6) : '');
     } else {
@@ -1325,8 +1371,13 @@ async function saveUsername() {
   } catch (e) {
     setBtnState(btn, 'idle', 'Save username');
     const msg = e && e.message ? e.message : String(e);
-    if (msg.toLowerCase().includes('timeout')) {
-      showError('Username tx timed out — it may still confirm.');
+    if (isRelayTimeout(msg)) {
+      // Soft timeout — the name change may still confirm. Refresh shortly so a
+      // late-confirmed name resolves on its own; never resubmit automatically.
+      showError('Taking longer than expected to confirm — your name may still update. Check back in a moment.');
+      if (!DEMO && window.UsernodeUsernames) {
+        setTimeout(() => UsernodeUsernames.refresh().catch(() => {}), 2000);
+      }
     } else {
       showError('Failed to save username: ' + msg);
     }
@@ -1680,9 +1731,7 @@ function renderResult(round, myGuesses) {
     headingEl.style.display = 'none';
   }
 
-  const winnerName = round.winner
-    ? (window.UsernodeUsernames ? UsernodeUsernames.getUsernameSync(round.winner) : defName(round.winner))
-    : '—';
+  const winnerName = round.winner ? getName(round.winner) : '—';
   document.getElementById('result-winner').textContent =
     round.winner ? ('🏆 ' + escapeHtml(winnerName) + ' guessed ' + round.winnerGuess) : 'No winner this round';
 
@@ -1713,8 +1762,22 @@ function defName(addr) {
 
 function getName(addr) {
   if (!addr) return '?';
-  if (window.UsernodeUsernames) return UsernodeUsernames.getUsernameSync(addr) || defName(addr);
+  if (window.UsernodeUsernames) {
+    const n = UsernodeUsernames.getUsernameSync(addr);
+    // Never render a blocked name; fall back to the neutral placeholder.
+    if (n && !isHiddenName(n)) return n;
+  }
   return defName(addr);
+}
+
+// True only when this pubkey has a REAL, custom-set Usernode username — i.e. the
+// resolved name is not the auto-generated user_<last6> fallback and is not
+// blocked. Mirrors the server-side "named players only" rule as a defensive
+// client guard; the authoritative filter is server-side in game-logic.
+function hasCustomName(addr) {
+  if (!addr || !window.UsernodeUsernames) return false;
+  const n = UsernodeUsernames.getUsernameSync(addr);
+  return !!n && n !== defName(addr) && !isHiddenName(n);
 }
 
 function renderLeaderboard() {
@@ -1724,6 +1787,10 @@ function renderLeaderboard() {
   const entries = Object.entries(stats)
     .map(([pubkey, s]) => ({ pubkey, ...s }))
     .filter((e) => e.bestWinGuessCount != null)
+    // Defensive: server already excludes blocked + unnamed players. Also require
+    // a real custom username here so a stale cache can't leak a blocked name or
+    // an auto-generated user_<last6> fallback row.
+    .filter((e) => hasCustomName(e.pubkey))
     .sort((a, b) =>
       a.bestWinGuessCount - b.bestWinGuessCount ||
       b.won - a.won ||
@@ -1919,6 +1986,7 @@ async function init() {
   // Demo mode is requested via ?demo=1 but only honored once the server
   // confirms USERNODE_ENV=staging (see maybeActivateDemo / refreshState).
   wantDemo = params.get('demo') === '1';
+  demoForceTimeout = params.get('demoTimeout') === '1';
 
   try {
     // No client-side chain bootstrap needed: the hosted bridge discovers the
