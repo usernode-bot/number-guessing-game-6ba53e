@@ -971,9 +971,14 @@ function demoRelayTimeout() {
 }
 
 // Activate demo mode once the server confirms we're in staging. Idempotent.
+// DEMO is only ever set true when gameState.staging is truthy — it cannot activate
+// on a production server (which never sets staging:true in /__numguess/state).
 function maybeActivateDemo() {
   if (DEMO || !wantDemo || !gameState || !gameState.staging) return;
   DEMO = true;
+  // Re-fetch account badge now that DEMO is active so it shows the demo identity
+  // (alice_s) rather than the real account that was resolved at init time.
+  loadAccount();
   if (!loggedIn) {
     attemptSignIn().then((ok) => {
       if (ok) { applyAuthUI(); if (gameState) render(); }
@@ -1013,13 +1018,20 @@ async function attemptSignIn() {
   myPubkey = addr;
   loggedIn = true;
 
-  // Resolve the chosen display name; fall back to the default until it loads.
-  myUsername = 'user_' + addr.slice(-6);
+  // Seed the display name: prefer the platform account username (already loaded
+  // by loadAccount()) so the pill/greeting immediately shows the same name as
+  // the header badge, eliminating the user_xxxxxx flash. Fall back to the default
+  // only when the account username hasn't resolved yet.
+  myUsername = accountUsername || ('user_' + addr.slice(-6));
   try {
     if (window.UsernodeUsernames && !DEMO) {
       await UsernodeUsernames.init();
-      const name = UsernodeUsernames.getUsernameSync(addr);
-      if (name) myUsername = name;
+      // Only use the registry name when there is no account username — the
+      // account username is the canonical identity for the signed-in player.
+      if (!accountUsername) {
+        const name = UsernodeUsernames.getUsernameSync(addr);
+        if (name) myUsername = name;
+      }
     }
   } catch (e) {
     console.warn('UsernodeUsernames.init failed:', e && e.message ? e.message : e);
@@ -1446,7 +1458,11 @@ let accountPubkey = null;
 async function loadAccount() {
   try {
     const headers = window._ngToken ? { 'x-usernode-token': window._ngToken } : {};
-    const demo = new URLSearchParams(window.location.search).get('demo') === '1' ? '?demo=1' : '';
+    // Use the DEMO flag when it's already active. On the first call at init time,
+    // DEMO is always false (demo activates later via maybeActivateDemo, which then
+    // re-calls loadAccount). So this is safe — no demo data leaks before staging
+    // is confirmed by the server.
+    const demo = DEMO ? '?demo=1' : '';
     const res = await fetch('/api/me' + demo, { cache: 'no-store', headers });
     if (!res.ok) return; // 401 / error → leave badge hidden
     const data = await res.json();
@@ -1888,8 +1904,8 @@ async function refreshMyGames() {
 
   try {
     const headers = window._ngToken ? { 'x-usernode-token': window._ngToken } : {};
-    // Forward ?demo=1 so a staging reviewer sees the seeded demo history.
-    const demo = new URLSearchParams(window.location.search).get('demo') === '1' ? '?demo=1' : '';
+    // Forward ?demo=1 only when DEMO is confirmed active (server already verified staging).
+    const demo = DEMO ? '?demo=1' : '';
     const res = await fetch('/api/my-history' + demo, { cache: 'no-store', headers });
     if (res.status === 401) {
       if (summary) summary.style.display = 'none';
@@ -1965,8 +1981,10 @@ function scheduleNextPoll() {
   const ms = Date.now() < fastPollEnd ? FAST_POLL_MS : GAME_POLL_MS;
   pollTimer = setTimeout(async () => {
     if (window.UsernodeUsernames) await UsernodeUsernames.refresh();
-    // Upgrade the greeting/pill once the chosen username resolves from cache.
-    if (loggedIn && window.UsernodeUsernames && myAddress) {
+    // Upgrade the greeting/pill from the registry only when no account username is
+    // available — accountUsername (from /api/me) takes precedence as the canonical
+    // identity for the signed-in player's own views.
+    if (loggedIn && window.UsernodeUsernames && myAddress && !accountUsername) {
       const name = UsernodeUsernames.getUsernameSync(myAddress);
       if (name && name !== myUsername) { myUsername = name; updateGreeting(); }
     }
