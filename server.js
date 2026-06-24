@@ -55,13 +55,18 @@ const inFlightPayout = { '1h': false, '6h': false, '1d': false, '1w': false };
 // history (see GET /api/my-history). One-shot guard so a missing/unreachable DB
 // logs once instead of on every request.
 let dbWarned = false;
+// One-shot guard for the wallet/JWT pubkey mismatch diagnostic (see /api/my-history).
+let derivedMismatchWarned = false;
 
 // Staging demo identity + rows for the "My Games" tab. A real staging reviewer
 // signs in as themselves, whose wallet never matches the seeded on-chain
 // players, so without this their personal history would always be empty. These
 // rows are obviously fake (fixed `staging-demo-user`, "alice_s" display name)
 // and are surfaced read-only behind `IS_STAGING && ?demo=1`. No-op in prod.
-const STAGING_DEMO_USER = { id: 'staging-demo-user', username: 'alice_s', usernode_pubkey: null };
+//
+// usernode_pubkey = p1 so the demo identity maps to real seeded on-chain guesses,
+// making the identity-matching path exercisable in staging review without ?demo=1.
+const STAGING_DEMO_USER = { id: 'staging-demo-user', username: 'alice_s', usernode_pubkey: 'utpk1stagingplayer000000000000000000000000000000000000000001' };
 const STAGING_DEMO_RESULTS = (() => {
   const now = Date.now();
   const hour = 3600000;
@@ -993,6 +998,21 @@ app.get('/api/my-history', async (req, res) => {
   }
 
   const derived = collectUserResults(pubkey);
+
+  // Diagnostic: if the player has a linked wallet but zero finished rounds match,
+  // while the game already has completed rounds with guesses, log once. This surfaces
+  // cases where req.user.usernode_pubkey differs from the wallet used to place guesses.
+  if (!derivedMismatchWarned && derived.length === 0 && game.rounds.size > 0) {
+    let hasFinishedGuess = false;
+    for (const [, r] of game.rounds) {
+      if (r.endedAt && r.guesses.length) { hasFinishedGuess = true; break; }
+    }
+    if (hasFinishedGuess) {
+      console.warn(`[my-history] pubkey ${pubkey.slice(0, 16)}… matched 0 finished rounds despite completed rounds existing — possible wallet/JWT pubkey mismatch (user: ${req.user.id})`);
+      derivedMismatchWarned = true;
+    }
+  }
+
   let results = derived;
 
   if (db.isEnabled()) {
