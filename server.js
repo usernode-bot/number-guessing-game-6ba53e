@@ -913,6 +913,24 @@ app.get('/api/my-history', async (req, res) => {
   res.json({ results, stats: computeHistoryStats(results) });
 });
 
+// Signed-in Usernode account identity, surfaced to the header badge. Under
+// /api/ so the deny-by-default middleware 401s without a valid token (NOT in
+// PUBLIC_API_PATHS) — the frontend treats that as "no identity" and hides the
+// badge. Returns only the three already-public identity fields from req.user;
+// never echoes the raw token or any other JWT claims.
+app.get('/api/me', (req, res) => {
+  // Staging-only demo parity: reviewers exercising ?demo=1 (whose JWT is their
+  // own account) still see a populated badge and the "no wallet linked" path.
+  // No-op in production.
+  if (IS_STAGING && req.query.demo === '1') {
+    const { id, username, usernode_pubkey } = STAGING_DEMO_USER;
+    return res.json({ authenticated: true, id, username, usernode_pubkey, demo: true });
+  }
+
+  const { id, username, usernode_pubkey } = req.user;
+  res.json({ authenticated: true, id, username, usernode_pubkey });
+});
+
 const VALID_TRACKS = new Set(['1h', '6h', '1d', '1w']);
 
 // Admin: set difficulty for a specific track's next round
