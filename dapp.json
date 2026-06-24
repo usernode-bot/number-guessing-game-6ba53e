@@ -143,6 +143,16 @@
       "name": "Personal history endpoint returns demo results",
       "path": "/api/my-history?demo=1",
       "expectText": "outcome"
+    },
+    {
+      "name": "Account identity endpoint returns the signed-in username",
+      "path": "/api/me?demo=1",
+      "expectText": "alice_s"
+    },
+    {
+      "name": "Account badge markup is present in the header",
+      "path": "/?demo=1",
+      "expectSelector": "#account-badge"
     }
   ]
 }

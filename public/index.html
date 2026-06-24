@@ -145,6 +145,16 @@
     }
     .username-pill:active { transform: scale(.96); }
     .username-pill:hover { background: var(--bg-card-hover); color: var(--text); border-color: var(--border-strong); }
+    /* Read-only Usernode account identity. Distinct from the editable wallet
+       pill: no pointer cursor, no hover/click affordance. */
+    .account-badge {
+      display: flex; align-items: center;
+      background: transparent; border: 1px solid var(--border);
+      border-radius: 2rem; padding: .4rem .7rem;
+      font-size: .74rem; font-weight: 600; color: var(--text-muted);
+      white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+      cursor: default; user-select: none;
+    }
     .theme-btn {
       background: var(--bg-card); border: 1px solid var(--border); border-radius: .7rem;
       color: var(--text-muted); padding: .4rem .55rem; cursor: pointer; font-size: .95rem; line-height: 1;
@@ -548,6 +558,10 @@
 <header class="header">
   <span class="header-logo">🎯</span>
   <span class="header-title">Number Guessing Game</span>
+  <!-- Read-only signed-in Usernode account; hidden until /api/me resolves. -->
+  <div class="account-badge" id="account-badge" style="display:none">
+    <span id="account-badge-name"></span>
+  </div>
   <div class="username-pill" id="username-pill" onclick="onHeaderPillClick()">
     <span>👤</span>
     <span id="username-display">…</span>
@@ -1372,6 +1386,34 @@ async function saveMode() {
   }
 }
 
+// ---- Signed-in Usernode account badge ----
+// Independent of the wallet/bridge sign-in: the account identity comes from the
+// iframe JWT (req.user) and is shown even before a wallet is connected. Fetched
+// once at boot; the JWT identity doesn't change within a session.
+let accountUsername = null;
+let accountPubkey = null;
+async function loadAccount() {
+  try {
+    const headers = window._ngToken ? { 'x-usernode-token': window._ngToken } : {};
+    const demo = new URLSearchParams(window.location.search).get('demo') === '1' ? '?demo=1' : '';
+    const res = await fetch('/api/me' + demo, { cache: 'no-store', headers });
+    if (!res.ok) return; // 401 / error → leave badge hidden
+    const data = await res.json();
+    if (!data || !data.username) return;
+    accountUsername = data.username;
+    accountPubkey = data.usernode_pubkey || null;
+    const badge = document.getElementById('account-badge');
+    const nameEl = document.getElementById('account-badge-name');
+    if (nameEl) nameEl.textContent = '@' + accountUsername;
+    if (badge) {
+      badge.title = 'Signed in to Usernode as @' + accountUsername;
+      badge.style.display = '';
+    }
+  } catch (e) {
+    console.warn('loadAccount failed:', e && e.message ? e.message : e);
+  }
+}
+
 // ---- State fetch & render ----
 async function refreshState() {
   try {
@@ -1884,6 +1926,11 @@ async function init() {
     // called (same path the username send uses). We previously called a
     // non-existent window.discoverChainId() here, which always threw and was
     // swallowed — removed so init no longer fails mid-bootstrap.
+
+    // Surface the signed-in Usernode account (JWT identity) immediately — this
+    // is independent of the wallet/bridge sign-in below and shows even with no
+    // wallet linked.
+    await loadAccount();
 
     // Silent auto-sign-in: if a wallet is already connected, go straight to
     // the board; otherwise applyAuthUI() shows the sign-in gate.
