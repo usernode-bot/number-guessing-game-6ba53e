@@ -86,6 +86,40 @@ const STAGING_DEMO_RESULTS = (() => {
   ];
 })();
 
+// Per-guess demo rows for the "My Games" expanded view — the companion to
+// STAGING_DEMO_RESULTS. Each round's guess list is consistent with that round's
+// num_guesses / best_guess / best_distance / secret above, so the row summary
+// and the expanded detail agree. Obviously fake, tied to the same demo identity.
+const STAGING_DEMO_GUESSES = (() => {
+  const now = Date.now();
+  const min = 60000;
+  // round_id -> ordered guess values; distance is derived from the round secret.
+  const byRound = {
+    62: { secret: 250, track: '1d', difficulty: 'hard',   guesses: [400, 320, 280, 265, 258, 255, 253, 251, 252, 250] },
+    50: { secret: 5,   track: '1d', difficulty: 'easy',   guesses: [5] },
+    8:  { secret: 50,  track: '1h', difficulty: 'medium', guesses: [50] },
+    23: { secret: 45,  track: '1w', difficulty: 'medium', guesses: [40, 55, 41, 47] },
+    5:  { secret: 61,  track: '1h', difficulty: 'medium', guesses: [70, 55, 60] },
+    12: { secret: 6,   track: '6h', difficulty: 'easy',   guesses: [10, 8] },
+  };
+  const out = [];
+  for (const [roundId, spec] of Object.entries(byRound)) {
+    spec.guesses.forEach((guess, i) => {
+      out.push({
+        round_id: Number(roundId),
+        track: spec.track,
+        difficulty: spec.difficulty,
+        guess_index: i + 1,
+        guess,
+        distance: Math.abs(guess - spec.secret),
+        amount: 1,
+        guessed_at: now - (spec.guesses.length - i) * min,
+      });
+    });
+  }
+  return out;
+})();
+
 // Derive a single player's finished-round results from the live on-chain state.
 // Mirrors the closest-to-secret logic used by findWinner / renderHistory.
 function collectUserResults(pubkey) {
@@ -129,6 +163,70 @@ function collectUserResults(pubkey) {
   }
   out.sort((a, b) => (b.ended_at || 0) - (a.ended_at || 0) || b.round_id - a.round_id);
   return out;
+}
+
+// Derive a single player's individual guess attempts from the live on-chain
+// state — the per-guess companion to collectUserResults. One row per guess in a
+// FINISHED round (secret known, so distance is always resolvable), ordered by
+// `ts` to assign a stable 1-based guess_index. Shaped for db.upsertGuesses and
+// for inline embedding in the /api/my-history response.
+function collectUserGuesses(pubkey) {
+  if (!pubkey) return [];
+  const out = [];
+  for (const [, r] of game.rounds) {
+    if (!r.endedAt) continue;
+    const mine = r.guesses
+      .filter((g) => g.from === pubkey)
+      .slice()
+      .sort((a, b) => a.ts - b.ts);
+    if (!mine.length) continue;
+
+    const secret = r.secret != null
+      ? r.secret
+      : (r.seedHash ? game.computeSecret(r.seedHash, r.range) : null);
+
+    mine.forEach((g, i) => {
+      out.push({
+        round_id: r.id,
+        track: r.durationTrack || null,
+        difficulty: r.difficulty || 'medium',
+        guess_index: i + 1,
+        guess: g.guess,
+        distance: secret != null ? Math.abs(g.guess - secret) : null,
+        amount: g.amount || 0,
+        guessed_at: g.ts || null,
+      });
+    });
+  }
+  return out;
+}
+
+// Group an array of per-guess rows (db- or chain-derived) into a map keyed by
+// round_id with each round's guesses ordered by guess_index — the same shape
+// db.getGuessesForUser returns — so the handler can attach them inline.
+function groupGuessesByRound(rows) {
+  const byRound = new Map();
+  for (const g of rows || []) {
+    if (!byRound.has(g.round_id)) byRound.set(g.round_id, []);
+    byRound.get(g.round_id).push({
+      guess_index: g.guess_index,
+      guess: g.guess,
+      distance: g.distance,
+      amount: g.amount,
+      guessed_at: g.guessed_at,
+    });
+  }
+  for (const list of byRound.values()) list.sort((a, b) => a.guess_index - b.guess_index);
+  return byRound;
+}
+
+// Attach each result's ordered guess list (from a round_id -> guesses[] map)
+// onto the result objects as a `guesses` array, in place. Missing rounds get [].
+function attachGuesses(results, byRound) {
+  for (const r of results) {
+    r.guesses = (byRound && byRound.get(r.round_id)) || [];
+  }
+  return results;
 }
 
 function computeHistoryStats(results) {
@@ -992,9 +1090,11 @@ app.get('/api/my-history', async (req, res) => {
   // matches no seeded round) still sees a populated tab. Never persists; no-op
   // in production.
   if (IS_STAGING && req.query.demo === '1') {
+    const demoResults = STAGING_DEMO_RESULTS.map((r) => ({ ...r }));
+    attachGuesses(demoResults, groupGuessesByRound(STAGING_DEMO_GUESSES));
     return res.json({
-      results: STAGING_DEMO_RESULTS,
-      stats: computeHistoryStats(STAGING_DEMO_RESULTS),
+      results: demoResults,
+      stats: computeHistoryStats(demoResults),
       demo: true,
     });
   }
@@ -1006,6 +1106,7 @@ app.get('/api/my-history', async (req, res) => {
   }
 
   const derived = collectUserResults(pubkey);
+  const derivedGuesses = collectUserGuesses(pubkey);
 
   // Diagnostic: if the player has a linked wallet but zero finished rounds match,
   // while the game already has completed rounds with guesses, log once. This surfaces
@@ -1022,12 +1123,18 @@ app.get('/api/my-history', async (req, res) => {
   }
 
   let results = derived;
+  // Default to the freshly-derived guesses (also the fallback if the DB read
+  // fails); replaced by the persisted set below when persistence is healthy.
+  let guessesByRound = groupGuessesByRound(derivedGuesses);
 
   if (db.isEnabled()) {
     try {
       await db.upsertResults(req.user, derived);
+      await db.upsertGuesses(req.user, derivedGuesses);
       const persisted = await db.getResultsForUser(req.user.id);
       if (persisted) results = persisted;
+      const persistedGuesses = await db.getGuessesForUser(req.user.id);
+      if (persistedGuesses) guessesByRound = persistedGuesses;
     } catch (e) {
       // Degrade to freshly-derived (unsaved) results rather than 500-ing.
       if (!dbWarned) {
@@ -1037,6 +1144,7 @@ app.get('/api/my-history', async (req, res) => {
     }
   }
 
+  attachGuesses(results, guessesByRound);
   res.json({ results, stats: computeHistoryStats(results) });
 });
 
@@ -1279,6 +1387,7 @@ async function start() {
     // staging review. Idempotent; serves the same rows the ?demo=1 path returns.
     try {
       await db.upsertResults(STAGING_DEMO_USER, STAGING_DEMO_RESULTS);
+      await db.upsertGuesses(STAGING_DEMO_USER, STAGING_DEMO_GUESSES);
     } catch (e) {
       console.warn('[staging] demo game_results seed skipped:', e.message);
     }
