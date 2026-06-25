@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -65,50 +65,63 @@
 
   <style>
     :root {
-      --accent: #7c3aed;
-      --accent-light: #a78bfa;
-      --accent-dark: #6d28d9;
-      --accent-glow: rgba(124,58,237,0.38);
-      --accent-soft: rgba(124,58,237,0.13);
-      --accent-soft-border: rgba(124,58,237,0.30);
-      --bg: #06070d;
-      --bg-grad: radial-gradient(130% 90% at 50% -5%, rgba(124,58,237,0.18) 0%, rgba(109,40,217,0.04) 50%, transparent 70%);
-      --bg-elev: #0d1021;
-      --bg-card: #131826;
-      --bg-card-hover: #192035;
-      --text: #dce6f5;
-      --text-muted: #7a8fb0;
-      --text-faint: #374155;
-      --border: rgba(100,130,200,0.14);
-      --border-strong: rgba(120,150,220,0.28);
-      --shadow: 0 10px 40px rgba(0,0,0,0.60);
-      --shadow-sm: 0 2px 16px rgba(0,0,0,0.35);
-      --radius: 1.25rem;
-      --radius-sm: 0.8rem;
+      /* Softer dark theme — muted periwinkle accent, gentler glow. */
+      --accent: #8b7cf0;
+      --accent-light: #b3a6f7;
+      --accent-dark: #7468d6;
+      --accent-glow: rgba(139,124,240,0.22);
+      --accent-soft: rgba(139,124,240,0.12);
+      --accent-soft-border: rgba(139,124,240,0.26);
+      /* Calm secondary pastels (shared with light theme below). */
+      --mint: #6fd6b6;
+      --sky: #79c6ee;
+      --peach: #f6b89a;
+      --calm: #b3a6f7;
+      --bg: #0a0b14;
+      --bg-grad: radial-gradient(130% 90% at 50% -5%, rgba(139,124,240,0.12) 0%, rgba(139,124,240,0.03) 50%, transparent 72%);
+      --bg-elev: #12141f;
+      --bg-card: #161927;
+      --bg-card-hover: #1c2032;
+      --text: #e2e6f3;
+      --text-muted: #8b97b5;
+      --text-faint: #3a4258;
+      --border: rgba(120,135,200,0.14);
+      --border-strong: rgba(140,155,220,0.26);
+      --shadow: 0 12px 40px rgba(0,0,0,0.50);
+      --shadow-sm: 0 2px 14px rgba(0,0,0,0.28);
+      --radius: 1.4rem;
+      --radius-sm: 0.9rem;
       --nav-h: 64px;
       --safe-b: env(safe-area-inset-bottom, 0px);
       --safe-t: env(safe-area-inset-top, 0px);
       --maxw: 540px;
     }
     [data-theme="light"] {
-      --accent: #7c3aed;
-      --accent-light: #6d28d9;
-      --accent-dark: #5b21b6;
-      --accent-glow: rgba(124,58,237,0.22);
-      --accent-soft: rgba(124,58,237,0.09);
-      --accent-soft-border: rgba(124,58,237,0.22);
-      --bg: #f0eef8;
-      --bg-grad: radial-gradient(130% 90% at 50% -5%, rgba(124,58,237,0.10) 0%, rgba(124,58,237,0) 55%);
+      /* Calm light pastel: muted periwinkle-lavender accent, no neon glow,
+         soft off-white surfaces, diffuse low-opacity shadows. */
+      --accent: #8b7cf0;
+      --accent-light: #7d6ee8;
+      --accent-dark: #6a5bd0;
+      --accent-glow: rgba(139,124,240,0.16);
+      --accent-soft: rgba(139,124,240,0.10);
+      --accent-soft-border: rgba(139,124,240,0.22);
+      /* Secondary pastels for badges / tints. */
+      --mint: #4cc4a0;
+      --sky: #5aa9dd;
+      --peach: #e89a72;
+      --calm: #8b7cf0;
+      --bg: #f7f5fb;
+      --bg-grad: radial-gradient(135% 85% at 50% -8%, rgba(139,124,240,0.07) 0%, rgba(167,196,240,0.04) 45%, transparent 72%);
       --bg-elev: #ffffff;
       --bg-card: #ffffff;
-      --bg-card-hover: #f3f2fb;
-      --text: #1a1040;
-      --text-muted: #5b5585;
-      --text-faint: #bbb8d0;
-      --border: rgba(30,20,80,0.10);
-      --border-strong: rgba(30,20,80,0.18);
-      --shadow: 0 10px 30px rgba(30,20,80,0.10);
-      --shadow-sm: 0 2px 12px rgba(30,20,80,0.06);
+      --bg-card-hover: #f4f2fc;
+      --text: #3a3357;
+      --text-muted: #847da3;
+      --text-faint: #c5c1da;
+      --border: rgba(60,50,110,0.08);
+      --border-strong: rgba(60,50,110,0.15);
+      --shadow: 0 14px 40px rgba(90,80,150,0.10);
+      --shadow-sm: 0 3px 16px rgba(90,80,150,0.07);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 16px; -webkit-text-size-adjust: 100%; }
@@ -171,10 +184,10 @@
     .panel {
       display: none; padding: 1rem max(1rem, env(safe-area-inset-left)) 1.5rem max(1rem, env(safe-area-inset-right));
       max-width: var(--maxw); margin: 0 auto;
-      animation: panel-in .28s ease;
+      animation: panel-in .42s cubic-bezier(.22,.7,.3,1);
     }
     .panel.active { display: block; }
-    @keyframes panel-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @keyframes panel-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     /* ---- Card ---- */
     .card {
       background: var(--bg-card);
@@ -191,8 +204,8 @@
     }
     .streak-bar span { font-size: .8rem; font-weight: 600; color: var(--text-muted); display: inline-flex; align-items: baseline; }
     .streak-bar strong { font-size: 1.6rem; font-weight: 900; color: var(--text); margin-left: .4rem; font-variant-numeric: tabular-nums; }
-    @keyframes streak-pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.5); color: var(--accent-light); } }
-    .streak-pop { animation: streak-pop .45s ease; display: inline-block; }
+    @keyframes streak-pop { 0%,100% { transform: scale(1); } 45% { transform: scale(1.18); color: var(--accent-light); } }
+    .streak-pop { animation: streak-pop .6s cubic-bezier(.34,1.3,.64,1); display: inline-block; }
     /* ---- Round info bar ---- */
     .round-bar {
       display: flex; align-items: center; flex-wrap: wrap;
@@ -209,13 +222,14 @@
       padding: .25rem .55rem; border-radius: 2rem;
       background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-muted);
     }
-    .mode-badge.timed { border-color: rgba(244,63,94,0.5); color: #fb7185; background: rgba(244,63,94,0.10); }
-    .mode-badge.duration { border-color: rgba(56,189,248,0.5); color: #38bdf8; background: rgba(56,189,248,0.10); }
-    .mode-badge.hard { border-color: rgba(234,179,8,0.5); color: #eab308; background: rgba(234,179,8,0.10); }
-    .countdown { font-size: .88rem; font-weight: 700; color: var(--accent-light); font-variant-numeric: tabular-nums; flex: 1; text-align: center; min-width: 60px; }
-    .countdown.urgent { color: #fb7185; }
-    @keyframes countdown-pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
-    .countdown.pulse { animation: countdown-pulse .6s ease-in-out infinite; }
+    .mode-badge.timed { border-color: color-mix(in srgb, var(--peach) 55%, transparent); color: var(--peach); background: color-mix(in srgb, var(--peach) 12%, transparent); }
+    .mode-badge.duration { border-color: color-mix(in srgb, var(--sky) 55%, transparent); color: var(--sky); background: color-mix(in srgb, var(--sky) 12%, transparent); }
+    .mode-badge.hard { border-color: color-mix(in srgb, var(--mint) 55%, transparent); color: var(--mint); background: color-mix(in srgb, var(--mint) 12%, transparent); }
+    .countdown { font-size: .88rem; font-weight: 700; color: var(--accent-light); font-variant-numeric: tabular-nums; flex: 1; text-align: center; min-width: 60px; transition: color .4s ease; }
+    /* Calm urgency: a gently deeper accent tone as time runs low — never red,
+       never blinking. */
+    .countdown.urgent { color: var(--accent-dark); }
+    .countdown.pulse { color: var(--accent-dark); }
     .players-info { font-size: .76rem; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
     .settings-btn {
       background: var(--bg-elev); border: 1px solid var(--border); border-radius: .6rem;
@@ -232,6 +246,11 @@
       display: inline-block; font-size: .76rem; font-weight: 600; color: var(--accent-light); margin-bottom: 1rem;
       padding: .35rem .8rem; background: var(--accent-soft); border-radius: 2rem;
       border: 1px solid var(--accent-soft-border);
+    }
+    /* ---- Per-guess encouragement (morale only, never reveals proximity) ---- */
+    .guess-encouragement {
+      font-size: .82rem; font-weight: 600; color: var(--text-muted);
+      margin: -.4rem 0 1rem; line-height: 1.4;
     }
     /* ---- My guesses list ---- */
     .my-guesses { margin-bottom: 1.1rem; text-align: left; }
@@ -309,7 +328,7 @@
       border-radius: var(--radius-sm); padding: 1.1rem 1.25rem;
       animation: badge-in .3s ease; text-align: left;
     }
-    @keyframes badge-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes badge-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
     .locked-icon { font-size: 1.6rem; }
     .locked-text { flex: 1; }
     .locked-text strong { display: block; font-size: 1.05rem; font-weight: 800; color: var(--accent-light); }
@@ -317,44 +336,44 @@
     /* ---- Waiting state ---- */
     .waiting-notice {
       text-align: center; padding: 1.4rem 1.25rem;
-      background: rgba(234,179,8,0.10); border: 1px solid rgba(234,179,8,0.30);
+      background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
       border-radius: var(--radius-sm); margin-bottom: 1rem;
     }
     .waiting-notice .wn-icon { font-size: 1.7rem; margin-bottom: .5rem; }
-    .waiting-notice p { font-size: .86rem; font-weight: 500; color: #eab308; }
+    .waiting-notice p { font-size: .86rem; font-weight: 500; color: var(--text-muted); }
     /* ---- Time's Up banner ---- */
     .timesup-banner {
       text-align: center; padding: 1.6rem 1rem; margin-bottom: 1rem;
-      background: rgba(244,63,94,0.10); border: 1px solid rgba(244,63,94,0.35);
+      background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
       border-radius: var(--radius-sm);
-      animation: badge-in .3s ease;
+      animation: badge-in .4s ease;
     }
     .timesup-banner .tu-icon { font-size: 2.2rem; margin-bottom: .4rem; }
-    .timesup-banner .tu-title { font-size: 1.2rem; font-weight: 900; color: #fb7185; margin-bottom: .25rem; }
+    .timesup-banner .tu-title { font-size: 1.2rem; font-weight: 800; color: var(--accent); margin-bottom: .25rem; }
     .timesup-banner .tu-sub { font-size: .84rem; color: var(--text-muted); }
     /* ---- Result panel ---- */
     .result-card { padding: 2rem 1.5rem; margin-bottom: 1rem; text-align: center; }
-    .result-heading { font-size: .78rem; color: #fb7185; font-weight: 800; letter-spacing: .06em; margin-bottom: .75rem; text-transform: uppercase; }
+    .result-heading { font-size: .78rem; color: var(--accent); font-weight: 800; letter-spacing: .06em; margin-bottom: .75rem; text-transform: uppercase; }
     .result-secret { font-size: 4rem; font-weight: 900; color: var(--accent-light); line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; text-shadow: 0 4px 28px var(--accent-glow); }
     .result-label { font-size: .72rem; color: var(--text-muted); margin: .4rem 0 1.25rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
     .result-winner { font-size: 1.02rem; font-weight: 700; margin-bottom: .5rem; }
     .result-mine { font-size: .92rem; color: var(--text-muted); margin-bottom: 1rem; }
     .bullseye-badge {
       display: inline-block;
-      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      background: linear-gradient(135deg, var(--peach), var(--accent-light));
       color: #fff; font-weight: 900; font-size: .85rem; letter-spacing: .06em;
       padding: .4rem 1rem; border-radius: 2rem; margin-bottom: 1.1rem;
-      animation: badge-in .4s ease; box-shadow: 0 4px 18px rgba(239,68,68,0.4);
+      animation: badge-in .5s cubic-bezier(.34,1.3,.64,1); box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 30%, transparent);
     }
     .next-round-label { font-size: .8rem; color: var(--text-muted); margin-top: 1.1rem; }
     /* ---- Error card ---- */
     .error-card {
       padding: 1rem 1.1rem; margin-bottom: 1rem;
-      background: rgba(244,63,94,0.10); border: 1px solid rgba(244,63,94,0.30);
-      border-radius: var(--radius-sm); font-size: .86rem; color: #fb7185;
+      background: color-mix(in srgb, var(--peach) 12%, transparent); border: 1px solid color-mix(in srgb, var(--peach) 32%, transparent);
+      border-radius: var(--radius-sm); font-size: .86rem; color: var(--text);
       display: flex; align-items: flex-start; gap: .75rem;
     }
-    .error-card button { background: none; border: none; color: #fb7185; cursor: pointer; font-size: 1.1rem; margin-left: auto; line-height: 1; }
+    .error-card button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; margin-left: auto; line-height: 1; }
     /* ---- Leaderboard ---- */
     .lb-row {
       display: flex; align-items: center; gap: .8rem;
@@ -463,10 +482,10 @@
       background: var(--bg-elev); border: 1px solid var(--border);
       border-radius: var(--radius) var(--radius) 0 0;
       padding: 1.5rem 1.25rem calc(2rem + var(--safe-b)); width: 100%; max-width: var(--maxw);
-      animation: slide-up .26s cubic-bezier(.2,.8,.2,1);
-      box-shadow: 0 -8px 40px rgba(0,0,0,0.4);
+      animation: slide-up .4s cubic-bezier(.22,.7,.3,1);
+      box-shadow: 0 -10px 44px rgba(60,50,110,0.18);
     }
-    @keyframes slide-up { from { transform: translateY(70px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes slide-up { from { transform: translateY(80px); opacity: 0; } to { transform: none; opacity: 1; } }
     .modal-title { font-size: 1.05rem; font-weight: 800; margin-bottom: 1.1rem; }
     .username-input-row {
       display: flex; align-items: center; gap: .5rem;
@@ -519,7 +538,7 @@
     /* ---- Reconnect bar ---- */
     .reconnect-bar {
       display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 500;
-      background: #92400e; color: #fef3c7; text-align: center;
+      background: var(--accent); color: #fff; text-align: center;
       font-size: .8rem; padding: calc(.4rem + var(--safe-t)) .4rem .4rem; font-weight: 700;
     }
     .reconnect-bar.show { display: block; }
@@ -552,7 +571,7 @@
 </head>
 <body>
 
-<div class="reconnect-bar" id="reconnect-bar">Reconnecting…</div>
+<div class="reconnect-bar" id="reconnect-bar">Reconnecting — one moment…</div>
 
 <!-- Header -->
 <header class="header">
@@ -618,21 +637,22 @@
 
     <!-- Waiting for players -->
     <div class="waiting-notice" id="waiting-notice" style="display:none">
-      <div class="wn-icon">⏳</div>
-      <p>Waiting for more players… Round will extend when time runs out.</p>
+      <div class="wn-icon">🌿</div>
+      <p>Hanging out for a few more players — the round gently extends until enough folks join. No rush.</p>
     </div>
 
     <!-- Time's Up banner (timed rounds that expired before server closes them) -->
     <div class="timesup-banner" id="timesup-banner" style="display:none">
-      <div class="tu-icon">⏰</div>
-      <div class="tu-title">Time's Up!</div>
-      <div class="tu-sub">Round is closing… results coming soon.</div>
+      <div class="tu-icon">🌙</div>
+      <div class="tu-title">That's a wrap</div>
+      <div class="tu-sub">Round's winding down — results coming in just a moment.</div>
     </div>
 
     <!-- Guess card -->
     <div class="card guess-card" id="guess-card">
       <div class="guess-label" id="guess-label">Pick a number between 1 and 100</div>
       <div id="guess-counter" class="guess-counter" style="display:none"></div>
+      <div id="guess-encouragement" class="guess-encouragement" style="display:none"></div>
       <div id="my-guesses-list" class="my-guesses" style="display:none"></div>
       <div id="guess-input-area">
         <div class="slider-row">
@@ -645,8 +665,8 @@
       <div id="all-guesses-used-msg" class="locked-badge" style="display:none">
         <span class="locked-icon">🔒</span>
         <div class="locked-text">
-          <strong>All guesses used</strong>
-          <small>Waiting for round to end… Good luck!</small>
+          <strong>All your guesses are in 🌸</strong>
+          <small>Sit back and relax — we'll reveal the number when the round wraps up.</small>
         </div>
       </div>
     </div>
@@ -656,7 +676,7 @@
       <span class="locked-icon">🔒</span>
       <div class="locked-text">
         <strong id="locked-number">Your guess: —</strong>
-        <small>Your guess is locked in. Good luck!</small>
+        <small>Locked in — relax and good luck! 🍀</small>
       </div>
     </div>
 
@@ -839,7 +859,11 @@ function toggleTheme() {
 (function () {
   try {
     const saved = localStorage.getItem('ng:theme');
-    if (saved) document.documentElement.setAttribute('data-theme', saved);
+    // Light pastel is the default; only a stored preference overrides it, so
+    // returning users keep whatever they last chose.
+    if (saved === 'dark' || saved === 'light') {
+      document.documentElement.setAttribute('data-theme', saved);
+    }
   } catch {}
 })();
 
@@ -1302,7 +1326,7 @@ function reapplyDemoGuesses() {
 function guessSoftTimeout(btn) {
   setSending(false);
   setBtnState(btn, 'idle', 'Place Guess — 1 token');
-  showError('Taking longer than expected to confirm — it may still go through. Check back in a moment.');
+  showError('Hang tight — this is taking a moment to confirm. It may still go through; check back shortly. 🌿');
   fastPollEnd = Date.now() + FAST_POLL_DURATION;
   document.getElementById('reconnect-bar').classList.add('show');
   if (!DEMO) { refreshState().catch(() => {}); scheduleNextPoll(); }
@@ -1479,11 +1503,11 @@ async function placeGuess() {
     } else if (low.includes('declin') || low.includes('reject') || low.includes('cancel') || low.includes('denied')) {
       setSending(false);
       setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
-      showError('Transaction declined — your guess was not placed.');
+      showError('No problem — your guess wasn\'t placed. Try again whenever you\'re ready. 🍀');
     } else {
       setSending(false);
       setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
-      showError('Transaction failed: ' + msg);
+      showError('Hmm, that guess didn\'t go through. Give it another try in a moment.');
     }
   }
 }
@@ -1853,14 +1877,36 @@ function updateGuessCard(round, myGuesses, maxGuesses, allGuessesUsed) {
   const allUsedMsg = document.getElementById('all-guesses-used-msg');
   const guessBtn = document.getElementById('guess-btn');
 
+  const encouragement = document.getElementById('guess-encouragement');
   if (maxGuesses > 1) {
     counter.style.display = '';
     const used = myGuesses.length;
     const remaining = maxGuesses - used;
     counter.textContent = used + ' of ' + maxGuesses + ' guesses used' +
       (remaining > 0 ? ' · ' + remaining + ' remaining' : '');
+
+    // Morale-only encouragement keyed purely to guesses remaining. It never
+    // consults the secret or proximity — the number is only known once the
+    // round ends — so gameplay is unchanged.
+    if (encouragement) {
+      let msg = '';
+      if (remaining >= 1) {
+        if (used === 0) {
+          msg = 'Take your time — pick a number that feels right 🌿';
+        } else if (remaining === 1) {
+          msg = 'Last guess — make it count, no pressure! 🍀';
+        } else if (remaining <= 3) {
+          msg = 'A few guesses left — trust your gut 🌸';
+        } else {
+          msg = 'Plenty of guesses left — no rush at all 🌿';
+        }
+      }
+      if (msg) { encouragement.textContent = msg; encouragement.style.display = ''; }
+      else { encouragement.style.display = 'none'; }
+    }
   } else {
     counter.style.display = 'none';
+    if (encouragement) encouragement.style.display = 'none';
   }
 
   if (myGuesses.length > 0) {
@@ -1895,7 +1941,7 @@ function renderResult(round, myGuesses) {
 
   const headingEl = document.getElementById('result-heading');
   if (isTimed && noWinner) {
-    headingEl.textContent = '⏰ TIME\'S UP';
+    headingEl.textContent = '🌙 THAT\'S A WRAP';
     headingEl.style.display = '';
   } else {
     headingEl.style.display = 'none';
@@ -1903,27 +1949,35 @@ function renderResult(round, myGuesses) {
 
   const winnerName = round.winner ? getName(round.winner) : '—';
   document.getElementById('result-winner').textContent =
-    round.winner ? ('🏆 ' + escapeHtml(winnerName) + ' guessed ' + round.winnerGuess) : 'No winner this round';
+    round.winner ? ('🏆 ' + escapeHtml(winnerName) + ' guessed ' + round.winnerGuess) : 'No winner this time — better luck next round!';
 
   const bestGuess = getMyBestGuess(round, myGuesses);
   if (bestGuess && secret != null) {
     const dist = Math.abs(bestGuess.guess - secret);
     const isBullseye = dist === 0;
+    const iWon = round.winner && round.winner === myAddress;
     document.getElementById('bullseye-badge').style.display = isBullseye ? '' : 'none';
-    document.getElementById('result-mine').textContent =
-      isBullseye ? 'You nailed it!' :
-      (myGuesses.length > 1
-        ? 'Your best guess was ' + bestGuess.guess + ' — ' + dist + ' away'
-        : 'Your guess was ' + bestGuess.guess + ' — ' + dist + ' away');
+    let mine;
+    if (isBullseye) {
+      mine = 'You nailed it! 🎯';
+    } else if (iWon) {
+      mine = (myGuesses.length > 1 ? 'Your best guess was ' : 'Your guess was ') + bestGuess.guess + ' — just ' + dist + ' away. Closest of all! 🏆';
+    } else {
+      // Warm, low-stakes framing for a non-winning round. Closer guesses get a
+      // little extra cheer.
+      const lead = dist <= 3 ? 'So close! ' : dist <= 10 ? 'Nice try! ' : 'Good effort! ';
+      mine = lead + (myGuesses.length > 1 ? 'Your best guess was ' : 'Your guess was ') + bestGuess.guess + ', just ' + dist + ' away. Jump into the next round!';
+    }
+    document.getElementById('result-mine').textContent = mine;
   } else {
     document.getElementById('bullseye-badge').style.display = 'none';
-    document.getElementById('result-mine').textContent = myGuesses.length > 0 ? '' : "You didn't guess this round";
+    document.getElementById('result-mine').textContent = myGuesses.length > 0 ? '' : 'You sat this one out — hop into the next round!';
   }
 
   const td = gameState.tracks && gameState.tracks[selectedTrack];
   const hasNext = td && td.currentRound && !td.currentRound.endedAt;
   document.getElementById('next-round-label').textContent =
-    hasNext ? '' : 'Next round starting soon…';
+    hasNext ? '' : 'A fresh round is on its way…';
 }
 
 function defName(addr) {
