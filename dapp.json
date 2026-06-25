@@ -45,6 +45,11 @@
       "expectSelector": "#guess-btn"
     },
     {
+      "name": "My-guesses list container present for optimistic pending rows",
+      "path": "/",
+      "expectSelector": "#my-guesses-list"
+    },
+    {
       "name": "Leaderboard tab renders",
       "path": "/",
       "expectSelector": ".bottom-nav"
