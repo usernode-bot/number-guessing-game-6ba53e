@@ -1032,7 +1032,11 @@ app.get('/usernode-usernames.js', (_req, res) => {
 // Explorer proxy
 app.use((req, res, next) => {
   if (!req.path.startsWith(EXPLORER_PROXY_PREFIX)) return next();
-  handleExplorerProxy(req, res, req.path);
+  // Cap each upstream round-trip so a stalled explorer can't hang the wallet
+  // bridge's post-send inclusion poll (the reported "spins forever, no result"
+  // bug). On timeout the proxy returns promptly and the client reconciles
+  // against /__numguess/state instead of waiting on a dead socket.
+  handleExplorerProxy(req, res, req.path, { timeoutMs: 12000 });
 });
 
 // Hidden-player-aware usernames state. Registered BEFORE the generic cache
