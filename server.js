@@ -16,6 +16,7 @@ const {
 } = require('./lib/dapp-server');
 const { createGame, DIFFICULTIES } = require('./game-logic');
 const db = require('./lib/db');
+const hidden = require('./lib/hidden-users');
 
 loadEnvFile();
 
@@ -54,13 +55,23 @@ const inFlightPayout = { '1h': false, '6h': false, '1d': false, '1w': false };
 // history (see GET /api/my-history). One-shot guard so a missing/unreachable DB
 // logs once instead of on every request.
 let dbWarned = false;
+// One-shot guard for the wallet/JWT pubkey mismatch diagnostic (see /api/my-history).
+let derivedMismatchWarned = false;
 
 // Staging demo identity + rows for the "My Games" tab. A real staging reviewer
 // signs in as themselves, whose wallet never matches the seeded on-chain
 // players, so without this their personal history would always be empty. These
 // rows are obviously fake (fixed `staging-demo-user`, "alice_s" display name)
 // and are surfaced read-only behind `IS_STAGING && ?demo=1`. No-op in prod.
-const STAGING_DEMO_USER = { id: 'staging-demo-user', username: 'alice_s', usernode_pubkey: null };
+//
+// usernode_pubkey = p1 so the demo identity maps to real seeded on-chain guesses,
+// making the identity-matching path exercisable in staging review without ?demo=1.
+const STAGING_DEMO_USER = { id: 'staging-demo-user', username: 'alice_s', usernode_pubkey: 'utpk1stagingplayer000000000000000000000000000000000000000001' };
+// Fixed demo wallet address. MUST match DEMO_ADDR in public/index.html: in demo
+// mode the client's myAddress is this value, and guessLanded() keys on
+// `from === myAddress`, so a staging guess ingested under this `from` is what
+// the demo client recognises as its own. Staging-only; never used in prod.
+const STAGING_DEMO_ADDR = 'utpk1demoplayer0000000000000000000000000000000000000000demo01';
 const STAGING_DEMO_RESULTS = (() => {
   const now = Date.now();
   const hour = 3600000;
@@ -73,6 +84,40 @@ const STAGING_DEMO_RESULTS = (() => {
     { round_id: 5,  track: '1h', difficulty: 'medium', num_guesses: 3,  won: false, outcome: 'lost', best_guess: 60,  best_distance: 1, secret: 61,  pot: 0,  ended_at: now - 12 * hour },
     { round_id: 12, track: '6h', difficulty: 'easy',   num_guesses: 2,  won: false, outcome: 'lost', best_guess: 8,   best_distance: 2, secret: 6,   pot: 0,  ended_at: now - 4 * hour },
   ];
+})();
+
+// Per-guess demo rows for the "My Games" expanded view — the companion to
+// STAGING_DEMO_RESULTS. Each round's guess list is consistent with that round's
+// num_guesses / best_guess / best_distance / secret above, so the row summary
+// and the expanded detail agree. Obviously fake, tied to the same demo identity.
+const STAGING_DEMO_GUESSES = (() => {
+  const now = Date.now();
+  const min = 60000;
+  // round_id -> ordered guess values; distance is derived from the round secret.
+  const byRound = {
+    62: { secret: 250, track: '1d', difficulty: 'hard',   guesses: [400, 320, 280, 265, 258, 255, 253, 251, 252, 250] },
+    50: { secret: 5,   track: '1d', difficulty: 'easy',   guesses: [5] },
+    8:  { secret: 50,  track: '1h', difficulty: 'medium', guesses: [50] },
+    23: { secret: 45,  track: '1w', difficulty: 'medium', guesses: [40, 55, 41, 47] },
+    5:  { secret: 61,  track: '1h', difficulty: 'medium', guesses: [70, 55, 60] },
+    12: { secret: 6,   track: '6h', difficulty: 'easy',   guesses: [10, 8] },
+  };
+  const out = [];
+  for (const [roundId, spec] of Object.entries(byRound)) {
+    spec.guesses.forEach((guess, i) => {
+      out.push({
+        round_id: Number(roundId),
+        track: spec.track,
+        difficulty: spec.difficulty,
+        guess_index: i + 1,
+        guess,
+        distance: Math.abs(guess - spec.secret),
+        amount: 1,
+        guessed_at: now - (spec.guesses.length - i) * min,
+      });
+    });
+  }
+  return out;
 })();
 
 // Derive a single player's finished-round results from the live on-chain state.
@@ -118,6 +163,70 @@ function collectUserResults(pubkey) {
   }
   out.sort((a, b) => (b.ended_at || 0) - (a.ended_at || 0) || b.round_id - a.round_id);
   return out;
+}
+
+// Derive a single player's individual guess attempts from the live on-chain
+// state — the per-guess companion to collectUserResults. One row per guess in a
+// FINISHED round (secret known, so distance is always resolvable), ordered by
+// `ts` to assign a stable 1-based guess_index. Shaped for db.upsertGuesses and
+// for inline embedding in the /api/my-history response.
+function collectUserGuesses(pubkey) {
+  if (!pubkey) return [];
+  const out = [];
+  for (const [, r] of game.rounds) {
+    if (!r.endedAt) continue;
+    const mine = r.guesses
+      .filter((g) => g.from === pubkey)
+      .slice()
+      .sort((a, b) => a.ts - b.ts);
+    if (!mine.length) continue;
+
+    const secret = r.secret != null
+      ? r.secret
+      : (r.seedHash ? game.computeSecret(r.seedHash, r.range) : null);
+
+    mine.forEach((g, i) => {
+      out.push({
+        round_id: r.id,
+        track: r.durationTrack || null,
+        difficulty: r.difficulty || 'medium',
+        guess_index: i + 1,
+        guess: g.guess,
+        distance: secret != null ? Math.abs(g.guess - secret) : null,
+        amount: g.amount || 0,
+        guessed_at: g.ts || null,
+      });
+    });
+  }
+  return out;
+}
+
+// Group an array of per-guess rows (db- or chain-derived) into a map keyed by
+// round_id with each round's guesses ordered by guess_index — the same shape
+// db.getGuessesForUser returns — so the handler can attach them inline.
+function groupGuessesByRound(rows) {
+  const byRound = new Map();
+  for (const g of rows || []) {
+    if (!byRound.has(g.round_id)) byRound.set(g.round_id, []);
+    byRound.get(g.round_id).push({
+      guess_index: g.guess_index,
+      guess: g.guess,
+      distance: g.distance,
+      amount: g.amount,
+      guessed_at: g.guessed_at,
+    });
+  }
+  for (const list of byRound.values()) list.sort((a, b) => a.guess_index - b.guess_index);
+  return byRound;
+}
+
+// Attach each result's ordered guess list (from a round_id -> guesses[] map)
+// onto the result objects as a `guesses` array, in place. Missing rounds get [].
+function attachGuesses(results, byRound) {
+  for (const r of results) {
+    r.guesses = (byRound && byRound.get(r.round_id)) || [];
+  }
+  return results;
 }
 
 function computeHistoryStats(results) {
@@ -177,7 +286,39 @@ app.use((req, res, next) => {
 // Game setup
 // ---------------------------------------------------------------------------
 
-const game = createGame({ appPubkey: APP_PUBKEY, timerDurationMs: TIMER_DURATION_MS, minPlayers: MIN_PLAYERS });
+// Snapshot of the live usernames directory (pubkey -> custom name), refreshed
+// by syncHiddenFromUsernames() before every public state read. The hide
+// predicate closes over this rather than rebuilding it per pubkey.
+let usernameMapCache = Object.create(null);
+
+// A player is hidden from every public view when EITHER:
+//   - they are on the explicit block-list (e.g. user_vedge), OR
+//   - they have NOT set a real Usernode username — i.e. their pubkey is absent
+//     from the usernames directory, so their name would only ever be the
+//     auto-generated `user_<last6>` fallback.
+// Only players with a real, custom-set username appear anywhere others can see.
+function isHiddenFromPublic(pubkey) {
+  if (hidden.isHiddenPubkey(pubkey)) return true;
+  return !usernameMapCache[pubkey];
+}
+
+const game = createGame({
+  appPubkey: APP_PUBKEY,
+  timerDurationMs: TIMER_DURATION_MS,
+  minPlayers: MIN_PLAYERS,
+  // Filter blocked + unnamed players out of all chain-derived public state.
+  isHidden: isHiddenFromPublic,
+});
+
+// Refresh the usernames snapshot and resolve any hide-by-username entries to
+// their pubkeys. Cheap + idempotent; called before each public state read so it
+// self-heals as set_username txs land. Returns the pubkey -> name map.
+function syncHiddenFromUsernames() {
+  const map = (usernamesCache.getStateResponse() || {}).usernames || {};
+  usernameMapCache = map;
+  hidden.resolveHiddenFromUsernameMap(map);
+  return map;
+}
 
 const numguessCache = createAppStateCache({
   name: 'numguess',
@@ -259,6 +400,15 @@ function injectStagingSeeds() {
   const p9 = 'utpk1stagingplayer000000000000000000000000000000000000000009';
   const p10 = 'utpk1stagingplayer00000000000000000000000000000000000000000a';
   const p11 = 'utpk1stagingplayer00000000000000000000000000000000000000000b';
+  // p12 is "user_vedge" — the blocked player. Seeded with prominent 1-guess wins
+  // so the leaderboard WOULD rank them #1; the hidden-users filter must remove
+  // them. Verifies the hide end-to-end (see rounds 40/41 + username u12 below).
+  const p12 = 'utpk1stagingplayer00000000000000000000000000000000000000000c';
+  // p13 has NEVER set a Usernode username, so their resolved name is only the
+  // auto-generated user_<last6> fallback. Seeded with a prominent 1-guess win
+  // (round 42) so they WOULD top the leaderboard — but the "named players only"
+  // filter must exclude them. Intentionally has no set_username seed tx.
+  const p13 = 'utpk1stagingplayer00000000000000000000000000000000000000000d';
 
   // Round 4: TIMED + HARD MODE — 2-minute timer started 2 hours ago → already expired on boot.
   const r4StartMs = now - 2 * hour;
@@ -566,6 +716,37 @@ function injectStagingSeeds() {
     { id: 'staging-r70-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 70, guess: 67 }), timestamp_ms: now - 8 * 60000 },
     { id: 'staging-r70-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 70, guess: 23 }), timestamp_ms: now - 6 * 60000 },
 
+    // ---- BLOCKED PLAYER FIXTURE (user_vedge = p12) ----
+    // Two 1d medium rounds won outright with a single bullseye guess. With
+    // bestWinGuessCount=1 and the most wins, p12 would top the medium leaderboard
+    // and be credited as the winner in history — UNLESS the hidden-users filter
+    // removes them. After the change they must be absent from both surfaces.
+    // Round 40 — 1d — medium — secret=50 — p12 wins with 1 guess (bullseye)
+    { id: 'staging-r40-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 40, seed_hash: '00000031' + '4'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d', difficulty: 'medium' }), timestamp_ms: now - 18 * day },
+    { id: 'staging-r40-g1', to: APP_PUBKEY, from_pubkey: p12, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 40, guess: 50 }), timestamp_ms: now - 18 * day + hour },
+    { id: 'staging-r40-g2', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 40, guess: 45 }), timestamp_ms: now - 18 * day + 2 * hour },
+    { id: 'staging-r40-g3', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 40, guess: 60 }), timestamp_ms: now - 18 * day + 3 * hour },
+    { id: 'staging-r40-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 40, secret: 50, winner: p12, winner_guess: 50, pot: 3, participants: 3 }), timestamp_ms: now - 17 * day },
+
+    // Round 41 — 1d — medium — secret=42 — p12 wins again with 1 guess (bullseye)
+    { id: 'staging-r41-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 41, seed_hash: '00000029' + '5'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d', difficulty: 'medium' }), timestamp_ms: now - 17 * day },
+    { id: 'staging-r41-g1', to: APP_PUBKEY, from_pubkey: p12, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 41, guess: 42 }), timestamp_ms: now - 17 * day + hour },
+    { id: 'staging-r41-g2', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 41, guess: 38 }), timestamp_ms: now - 17 * day + 2 * hour },
+    { id: 'staging-r41-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 41, guess: 50 }), timestamp_ms: now - 17 * day + 3 * hour },
+    { id: 'staging-r41-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 41, secret: 42, winner: p12, winner_guess: 42, pot: 3, participants: 3 }), timestamp_ms: now - 16 * day },
+
+    // ---- UNNAMED PLAYER FIXTURE (p13 — no Usernode username) ----
+    // A bullseye 1-guess win that WOULD make p13 the top medium-difficulty entry.
+    // Because p13 never set a username (no u13 below), the "named players only"
+    // filter must keep them off the leaderboard and out of history winner credit,
+    // while named players (dave_s, eve_s, …) remain.
+    // Round 42 — 1d — medium — secret=50 — p13 wins with 1 guess (bullseye)
+    { id: 'staging-r42-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 42, seed_hash: '00000031' + '6'.repeat(56), active_duration_ms: TIMER_DURATION_MS, min_players: MIN_PLAYERS, max_guesses_per_player: 10, mode: 'normal', duration_track: '1d', difficulty: 'medium' }), timestamp_ms: now - 16 * day },
+    { id: 'staging-r42-g1', to: APP_PUBKEY, from_pubkey: p13, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 42, guess: 50 }), timestamp_ms: now - 16 * day + hour },
+    { id: 'staging-r42-g2', to: APP_PUBKEY, from_pubkey: p4, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 42, guess: 44 }), timestamp_ms: now - 16 * day + 2 * hour },
+    { id: 'staging-r42-g3', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 42, guess: 58 }), timestamp_ms: now - 16 * day + 3 * hour },
+    { id: 'staging-r42-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 42, secret: 50, winner: p13, winner_guess: 50, pot: 3, participants: 3 }), timestamp_ms: now - 15 * day },
+
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
     { id: 'staging-u2', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'bob_s' }), timestamp_ms: now - 3 * day },
@@ -578,6 +759,16 @@ function injectStagingSeeds() {
     { id: 'staging-u9', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p9, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'iris_s' }), timestamp_ms: now - 31 * day },
     { id: 'staging-u10', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p10, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'jake_s' }), timestamp_ms: now - 31 * day },
     { id: 'staging-u11', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p11, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'kate_s' }), timestamp_ms: now - 31 * day },
+    // The blocked player's chosen name. Resolved to p12 by syncHiddenFromUsernames
+    // at request time, which drives the hide for the chain-derived leaderboard.
+    { id: 'staging-u12', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p12, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'user_vedge' }), timestamp_ms: now - 16 * day },
+    // The demo WALLET (STAGING_DEMO_ADDR, the client's myAddress in ?demo=1 mode)
+    // needs a username so guesses it places via the staging mock-ledger endpoint
+    // are NOT filtered out as an unnamed player by isHiddenFromPublic — otherwise
+    // they'd never appear in /__numguess/state and the client's reconciliation
+    // (guessLanded) could never confirm them. Distinct from the demo ACCOUNT
+    // badge (alice_s / p1, surfaced by /api/me?demo=1).
+    { id: 'staging-u-demo', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: STAGING_DEMO_ADDR, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'you_demo' }), timestamp_ms: now - 3 * day },
   ];
 
   // Route each seed tx to the right cache: numguess txs drive the game state,
@@ -853,7 +1044,27 @@ app.get('/usernode-usernames.js', (_req, res) => {
 // Explorer proxy
 app.use((req, res, next) => {
   if (!req.path.startsWith(EXPLORER_PROXY_PREFIX)) return next();
-  handleExplorerProxy(req, res, req.path);
+  // Cap each upstream round-trip so a stalled explorer can't hang the wallet
+  // bridge's post-send inclusion poll (the reported "spins forever, no result"
+  // bug). On timeout the proxy returns promptly and the client reconciles
+  // against /__numguess/state instead of waiting on a dead socket.
+  handleExplorerProxy(req, res, req.path, { timeoutMs: 12000 });
+});
+
+// Hidden-player-aware usernames state. Registered BEFORE the generic cache
+// handler below so it wins for this exact path: it omits any hidden pubkey from
+// the directory the frontend consumes, so a blocked player's chosen name never
+// reaches a client (residual references fall back to the neutral user_<last6>
+// placeholder). The vendored usernames cache is left untouched.
+app.get('/__usernames/state', (_req, res) => {
+  const map = syncHiddenFromUsernames();
+  const usernames = {};
+  for (const pubkey of Object.keys(map)) {
+    if (hidden.isHiddenPubkey(pubkey)) continue;
+    usernames[pubkey] = map[pubkey];
+  }
+  res.set('cache-control', 'no-store');
+  res.json({ usernames });
 });
 
 // Cache / status handlers
@@ -871,6 +1082,9 @@ app.get('/__numguess/state', async (req, res) => {
     return;
   }
   res.set('cache-control', 'no-store');
+  // Resolve hide-by-username -> pubkey before deriving state so blocked players
+  // are filtered everywhere this response touches (leaderboard, history, cards).
+  syncHiddenFromUsernames();
   const state = game.getStateResponse();
   state.staging = IS_STAGING;
   state.pendingDifficulty = { ...pendingDifficulty };
@@ -892,9 +1106,11 @@ app.get('/api/my-history', async (req, res) => {
   // matches no seeded round) still sees a populated tab. Never persists; no-op
   // in production.
   if (IS_STAGING && req.query.demo === '1') {
+    const demoResults = STAGING_DEMO_RESULTS.map((r) => ({ ...r }));
+    attachGuesses(demoResults, groupGuessesByRound(STAGING_DEMO_GUESSES));
     return res.json({
-      results: STAGING_DEMO_RESULTS,
-      stats: computeHistoryStats(STAGING_DEMO_RESULTS),
+      results: demoResults,
+      stats: computeHistoryStats(demoResults),
       demo: true,
     });
   }
@@ -906,13 +1122,35 @@ app.get('/api/my-history', async (req, res) => {
   }
 
   const derived = collectUserResults(pubkey);
+  const derivedGuesses = collectUserGuesses(pubkey);
+
+  // Diagnostic: if the player has a linked wallet but zero finished rounds match,
+  // while the game already has completed rounds with guesses, log once. This surfaces
+  // cases where req.user.usernode_pubkey differs from the wallet used to place guesses.
+  if (!derivedMismatchWarned && derived.length === 0 && game.rounds.size > 0) {
+    let hasFinishedGuess = false;
+    for (const [, r] of game.rounds) {
+      if (r.endedAt && r.guesses.length) { hasFinishedGuess = true; break; }
+    }
+    if (hasFinishedGuess) {
+      console.warn(`[my-history] pubkey ${pubkey.slice(0, 16)}… matched 0 finished rounds despite completed rounds existing — possible wallet/JWT pubkey mismatch (user: ${req.user.id})`);
+      derivedMismatchWarned = true;
+    }
+  }
+
   let results = derived;
+  // Default to the freshly-derived guesses (also the fallback if the DB read
+  // fails); replaced by the persisted set below when persistence is healthy.
+  let guessesByRound = groupGuessesByRound(derivedGuesses);
 
   if (db.isEnabled()) {
     try {
       await db.upsertResults(req.user, derived);
+      await db.upsertGuesses(req.user, derivedGuesses);
       const persisted = await db.getResultsForUser(req.user.id);
       if (persisted) results = persisted;
+      const persistedGuesses = await db.getGuessesForUser(req.user.id);
+      if (persistedGuesses) guessesByRound = persistedGuesses;
     } catch (e) {
       // Degrade to freshly-derived (unsaved) results rather than 500-ing.
       if (!dbWarned) {
@@ -922,7 +1160,26 @@ app.get('/api/my-history', async (req, res) => {
     }
   }
 
+  attachGuesses(results, guessesByRound);
   res.json({ results, stats: computeHistoryStats(results) });
+});
+
+// Signed-in Usernode account identity, surfaced to the header badge. Under
+// /api/ so the deny-by-default middleware 401s without a valid token (NOT in
+// PUBLIC_API_PATHS) — the frontend treats that as "no identity" and hides the
+// badge. Returns only the three already-public identity fields from req.user;
+// never echoes the raw token or any other JWT claims.
+app.get('/api/me', (req, res) => {
+  // Staging-only demo parity: reviewers exercising ?demo=1 (whose JWT is their
+  // own account) still see a populated badge and the "no wallet linked" path.
+  // No-op in production.
+  if (IS_STAGING && req.query.demo === '1') {
+    const { id, username, usernode_pubkey } = STAGING_DEMO_USER;
+    return res.json({ authenticated: true, id, username, usernode_pubkey, demo: true });
+  }
+
+  const { id, username, usernode_pubkey } = req.user;
+  res.json({ authenticated: true, id, username, usernode_pubkey });
 });
 
 const VALID_TRACKS = new Set(['1h', '6h', '1d', '1w']);
@@ -953,6 +1210,99 @@ app.post('/__numguess/admin/start', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Staging-only: ingest a placed guess into the in-memory mock ledger.
+//
+// In staging there is no funded wallet and no server signer (APP_SECRET_KEY
+// resolves to "" — see dapp.json), so a real on-chain send can never complete
+// and the guess would never enter the ledger. The post-send reconciliation in
+// the client (awaitGuessConfirmed → /__numguess/state) would then poll for ~18s
+// and give up with "Taking longer than expected to confirm…". This endpoint
+// lands the guess directly in the same in-memory ledger the seeds use, so it
+// confirms via the normal state reconciliation AND persists for the container's
+// lifetime (survives reloads). It is a strict no-op in production: 404 unless
+// IS_STAGING. POST under no public-path exemption, so the deny-by-default
+// middleware forces auth and populates req.user.
+// Make a staging wallet address a NAMED player (so its guesses aren't hidden by
+// the named-players-only filter). Idempotent: a no-op if the address already has
+// a username. Staging-only — only ever called from the endpoint below.
+function ensureStagingUsername(pubkey, preferredName) {
+  const map = (usernamesCache.getStateResponse() || {}).usernames || {};
+  if (map[pubkey]) return; // already named
+  const name = (preferredName && String(preferredName).trim())
+    ? String(preferredName).trim().slice(0, 32)
+    : ('you_' + pubkey.slice(-6));
+  usernamesCache.injectSeedTransactions([{
+    id: 'staging-live-uname-' + pubkey.slice(-16),
+    to: usernamesCache.usernamesPubkey,
+    from_pubkey: pubkey,
+    amount: 1,
+    memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: name }),
+    timestamp_ms: Date.now(),
+  }]);
+}
+
+app.post('/__numguess/staging/guess', (req, res) => {
+  if (!IS_STAGING) return res.status(404).json({ error: 'not found' });
+
+  const body = req.body || {};
+  const roundId = body.round;
+  const guess = parseInt(body.guess, 10);
+
+  // Attribute the guess to EXACTLY the address the client recognises as its own.
+  // guessLanded() on the client keys on `from === myAddress`, where myAddress is
+  // whatever the wallet bridge returned (getNodeAddress) — which is NOT
+  // guaranteed to equal req.user.usernode_pubkey (different formats / linkage).
+  // So we trust the client-supplied `from` here (staging-only fake data); it's
+  // the only value certain to match. Fall back to the JWT wallet, then force the
+  // fixed demo wallet in the demo identity.
+  let from = (typeof body.from === 'string' && body.from.trim())
+    ? body.from.trim()
+    : (req.user && req.user.usernode_pubkey);
+  if (req.query.demo === '1') from = STAGING_DEMO_ADDR;
+  if (!from || from.length > 128) return res.status(400).json({ error: 'no wallet address' });
+
+  // The player's guess is filtered out of /__numguess/state for any UNNAMED
+  // player (isHiddenFromPublic), so a reviewer with no username would never see
+  // their own guess land and confirmation would time out. Ensure this address is
+  // a named player by seeding a username for it (idempotent; no-op if already
+  // named — e.g. the demo wallet, which is seeded as you_demo).
+  ensureStagingUsername(from, req.user && req.user.username);
+
+  const round = game.rounds.get(roundId);
+  if (!round) return res.status(404).json({ error: 'no such round' });
+  if (round.endedAt) return res.status(409).json({ error: 'round already ended' });
+
+  const range = round.range || 100;
+  if (!Number.isFinite(guess) || guess < 1 || guess > range) {
+    return res.status(400).json({ error: `guess must be between 1 and ${range}` });
+  }
+
+  const maxGuesses = round.maxGuessesPerPlayer || 1;
+  const used = round.guesses.filter((g) => g.from === from).length;
+  if (used >= maxGuesses) {
+    return res.status(409).json({ error: 'no guesses remaining this round' });
+  }
+
+  // Deterministic id keyed on round+player+guess so a re-tap / double-submit of
+  // the same guess dedupes (via rawTxIds + seenTxIds) instead of double-counting.
+  // Same shape as the staging seed txs so it flows through processTransaction.
+  const txId = `staging-live-${roundId}-${from.slice(-8)}-${guess}`;
+  const before = round.guesses.length;
+  numguessCache.injectSeedTransactions([{
+    id: txId,
+    to: APP_PUBKEY,
+    from_pubkey: from,
+    amount: 1,
+    memo: JSON.stringify({ app: 'numguess', type: 'guess', round: roundId, guess }),
+    timestamp_ms: Date.now(),
+  }]);
+
+  const after = game.rounds.get(roundId);
+  const landed = after.guesses.some((g) => g.from === from && g.guess === guess);
+  const duplicate = after.guesses.length === before;
+  res.json({ ok: true, landed, duplicate });
 });
 
 // Mock-enabled probe — the hosted bridge probes this on startup to decide
@@ -1035,6 +1385,14 @@ async function start() {
   // history projection; apply its schema idempotently before serving.
   try {
     await db.initSchema();
+    // One-off cleanup: clear any persisted history rows for blocked players.
+    // Public surfaces are filtered live in game-logic; this only tidies the
+    // blocked player's own My Games projection. Pubkeys resolve lazily from the
+    // usernames cache after start, so seed the purge with the configured names.
+    await db.purgeHiddenUsers({
+      usernames: hidden.hiddenUsernames,
+      pubkeys: hidden.hiddenPubkeys,
+    });
   } catch (e) {
     console.error('[boot] game_results schema init failed (history persistence degraded):', e.message);
   }
@@ -1045,6 +1403,7 @@ async function start() {
     // staging review. Idempotent; serves the same rows the ?demo=1 path returns.
     try {
       await db.upsertResults(STAGING_DEMO_USER, STAGING_DEMO_RESULTS);
+      await db.upsertGuesses(STAGING_DEMO_USER, STAGING_DEMO_GUESSES);
     } catch (e) {
       console.warn('[staging] demo game_results seed skipped:', e.message);
     }
@@ -1053,6 +1412,10 @@ async function start() {
   await numguessCache.start();
   await usernamesCache.start();
   nodeStatusProbe.start();
+
+  // Prime the usernames snapshot so the hide-the-unnamed predicate is correct
+  // even for any state derivation that happens before the first public read.
+  syncHiddenFromUsernames();
 
   // After stream backfill, ensure all 4 tracks have an active round
   setTimeout(async () => {

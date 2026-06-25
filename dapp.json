@@ -148,6 +148,61 @@
       "name": "Personal history endpoint returns demo results",
       "path": "/api/my-history?demo=1",
       "expectText": "outcome"
+    },
+    {
+      "name": "Personal history embeds each player's individual guesses",
+      "path": "/api/my-history?demo=1",
+      "expectText": "guess_index"
+    },
+    {
+      "name": "Account identity endpoint returns the signed-in username",
+      "path": "/api/me?demo=1",
+      "expectText": "alice_s"
+    },
+    {
+      "name": "Demo account identity carries a wallet pubkey for history matching",
+      "path": "/api/me?demo=1",
+      "expectText": "utpk1stagingplayer"
+    },
+    {
+      "name": "Account badge markup is present in the header",
+      "path": "/?demo=1",
+      "expectSelector": "#account-badge"
+    },
+    {
+      "name": "Filtered usernames endpoint still serves visible players",
+      "path": "/__usernames/state",
+      "expectText": "dave_s"
+    },
+    {
+      "name": "Leaderboard tab loads with the blocked player filtered out",
+      "path": "/?demo=1",
+      "expectSelector": "#leaderboard-list"
+    },
+    {
+      "name": "Demo relay-timeout route loads the guess button without console errors",
+      "path": "/?demo=1&demoTimeout=1",
+      "expectSelector": "#guess-btn"
+    },
+    {
+      "name": "Relay-timeout recovery still confirms the guess (locked in)",
+      "path": "/?demo=1&demoTimeout=1&demoAutoGuess=1",
+      "expectText": "Locked in"
+    },
+    {
+      "name": "Demo auto-guess lands via the staging mock ledger without console errors",
+      "path": "/?demo=1&demoAutoGuess=1",
+      "expectSelector": "#guess-btn"
+    },
+    {
+      "name": "Leaderboard renders with only named Usernode players",
+      "path": "/?demo=1",
+      "expectSelector": "#leaderboard-list"
+    },
+    {
+      "name": "Usernames directory still serves a named seeded player",
+      "path": "/__usernames/state",
+      "expectText": "eve_s"
     }
   ]
 }
