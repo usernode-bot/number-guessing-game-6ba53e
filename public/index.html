@@ -1259,14 +1259,10 @@ function guessLanded(roundId, value) {
 // Bounded reconciliation: treat /__numguess/state as the source of truth for
 // "did my guess land?", decoupled from whether the bridge promise resolved.
 // Polls refreshState() until the guess appears or `deadline` passes. Never
-// resubmits — it only observes. In DEMO mode there is no server to poll, so we
-// simulate the guess landing by applying it optimistically, which lets the
-// recovery path be exercised end-to-end via ?demoTimeout=1.
+// resubmits — it only observes. This is environment-agnostic: in staging the
+// guess is landed server-side via postStagingGuess() before this runs, so it
+// shows up in /__numguess/state exactly like a real on-chain guess in prod.
 async function awaitGuessConfirmed(roundId, value, deadline) {
-  if (DEMO) {
-    applyOptimisticGuess(roundId, value);
-    return guessLanded(roundId, value);
-  }
   if (guessLanded(roundId, value)) return true;
   while (Date.now() < deadline) {
     try { await refreshState(); } catch {}
@@ -1310,6 +1306,39 @@ function guessSoftTimeout(btn) {
   fastPollEnd = Date.now() + FAST_POLL_DURATION;
   document.getElementById('reconnect-bar').classList.add('show');
   if (!DEMO) { refreshState().catch(() => {}); scheduleNextPoll(); }
+}
+
+// Land a guess in the staging server's in-memory mock ledger so it confirms via
+// the normal /__numguess/state reconciliation and persists across reloads. The
+// endpoint is staging-only (404 in production) — this is only ever called from
+// the staging/demo branch of placeGuess. Forward ?demo=1 so the server
+// attributes the guess to the demo wallet, matching this client's demo
+// myAddress. Soft-failing: a non-ok response just means reconciliation will time
+// out into the normal recovery path, exactly as before.
+async function postStagingGuess(roundId, guess) {
+  const demo = DEMO ? '?demo=1' : '';
+  try {
+    const res = await fetch('/__numguess/staging/guess' + demo, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-usernode-token': window._ngToken || '',
+      },
+      // Send our own wallet address so the server attributes the guess to
+      // EXACTLY the address guessLanded() matches on (myAddress). Without this
+      // the server would use the JWT pubkey, which can differ from the bridge
+      // wallet address and silently break the "is this mine?" confirmation.
+      body: JSON.stringify({ round: roundId, guess: guess, from: myAddress }),
+    });
+    if (!res.ok) {
+      console.warn('[postStagingGuess] server returned', res.status);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[postStagingGuess] failed:', e && e.message ? e.message : e);
+    return false;
+  }
 }
 
 // ---- Guess action ----
@@ -1372,10 +1401,19 @@ async function placeGuess() {
     // found it. A bare "promise resolved" is not enough (the bridge has a queued
     // path that resolves with no tx).
     let confirmed = false;
-    if (DEMO) {
-      if (demoForceTimeout) await demoRelayTimeout();
-      await demoHold();
-      // Demo "lands" the guess by reconciling against the optimistic patch.
+    if (DEMO || (gameState && gameState.staging)) {
+      // Staging preview: no funded wallet / server signer exists, so a real
+      // on-chain send can't complete. Instead land the guess in the staging
+      // server's in-memory mock ledger (staging-only endpoint) so it confirms
+      // via the normal state reconciliation AND persists across reloads. DEMO
+      // adds the simulated send delay so the spinner lifecycle stays observable;
+      // ?demoTimeout=1 still throws before the guess is posted, so it falls
+      // through to the calm soft-timeout recovery path below.
+      if (DEMO && demoForceTimeout) await demoRelayTimeout();
+      if (DEMO) await demoHold();
+      await postStagingGuess(round.id, guess);
+      // Snappy local render before the first authoritative refresh picks it up.
+      applyOptimisticGuess(round.id, guess);
       confirmed = await awaitGuessConfirmed(round.id, guess, Date.now() + GUESS_RECONCILE_MS);
     } else {
       const result = await window.sendTransaction(appPubkey, 1, memoStr, {

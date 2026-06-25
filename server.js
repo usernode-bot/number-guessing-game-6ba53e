@@ -67,6 +67,11 @@ let derivedMismatchWarned = false;
 // usernode_pubkey = p1 so the demo identity maps to real seeded on-chain guesses,
 // making the identity-matching path exercisable in staging review without ?demo=1.
 const STAGING_DEMO_USER = { id: 'staging-demo-user', username: 'alice_s', usernode_pubkey: 'utpk1stagingplayer000000000000000000000000000000000000000001' };
+// Fixed demo wallet address. MUST match DEMO_ADDR in public/index.html: in demo
+// mode the client's myAddress is this value, and guessLanded() keys on
+// `from === myAddress`, so a staging guess ingested under this `from` is what
+// the demo client recognises as its own. Staging-only; never used in prod.
+const STAGING_DEMO_ADDR = 'utpk1demoplayer0000000000000000000000000000000000000000demo01';
 const STAGING_DEMO_RESULTS = (() => {
   const now = Date.now();
   const hour = 3600000;
@@ -647,6 +652,13 @@ function injectStagingSeeds() {
     // The blocked player's chosen name. Resolved to p12 by syncHiddenFromUsernames
     // at request time, which drives the hide for the chain-derived leaderboard.
     { id: 'staging-u12', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p12, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'user_vedge' }), timestamp_ms: now - 16 * day },
+    // The demo WALLET (STAGING_DEMO_ADDR, the client's myAddress in ?demo=1 mode)
+    // needs a username so guesses it places via the staging mock-ledger endpoint
+    // are NOT filtered out as an unnamed player by isHiddenFromPublic — otherwise
+    // they'd never appear in /__numguess/state and the client's reconciliation
+    // (guessLanded) could never confirm them. Distinct from the demo ACCOUNT
+    // badge (alice_s / p1, surfaced by /api/me?demo=1).
+    { id: 'staging-u-demo', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: STAGING_DEMO_ADDR, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'you_demo' }), timestamp_ms: now - 3 * day },
   ];
 
   // Route each seed tx to the right cache: numguess txs drive the game state,
@@ -1074,6 +1086,99 @@ app.post('/__numguess/admin/start', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Staging-only: ingest a placed guess into the in-memory mock ledger.
+//
+// In staging there is no funded wallet and no server signer (APP_SECRET_KEY
+// resolves to "" — see dapp.json), so a real on-chain send can never complete
+// and the guess would never enter the ledger. The post-send reconciliation in
+// the client (awaitGuessConfirmed → /__numguess/state) would then poll for ~18s
+// and give up with "Taking longer than expected to confirm…". This endpoint
+// lands the guess directly in the same in-memory ledger the seeds use, so it
+// confirms via the normal state reconciliation AND persists for the container's
+// lifetime (survives reloads). It is a strict no-op in production: 404 unless
+// IS_STAGING. POST under no public-path exemption, so the deny-by-default
+// middleware forces auth and populates req.user.
+// Make a staging wallet address a NAMED player (so its guesses aren't hidden by
+// the named-players-only filter). Idempotent: a no-op if the address already has
+// a username. Staging-only — only ever called from the endpoint below.
+function ensureStagingUsername(pubkey, preferredName) {
+  const map = (usernamesCache.getStateResponse() || {}).usernames || {};
+  if (map[pubkey]) return; // already named
+  const name = (preferredName && String(preferredName).trim())
+    ? String(preferredName).trim().slice(0, 32)
+    : ('you_' + pubkey.slice(-6));
+  usernamesCache.injectSeedTransactions([{
+    id: 'staging-live-uname-' + pubkey.slice(-16),
+    to: usernamesCache.usernamesPubkey,
+    from_pubkey: pubkey,
+    amount: 1,
+    memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: name }),
+    timestamp_ms: Date.now(),
+  }]);
+}
+
+app.post('/__numguess/staging/guess', (req, res) => {
+  if (!IS_STAGING) return res.status(404).json({ error: 'not found' });
+
+  const body = req.body || {};
+  const roundId = body.round;
+  const guess = parseInt(body.guess, 10);
+
+  // Attribute the guess to EXACTLY the address the client recognises as its own.
+  // guessLanded() on the client keys on `from === myAddress`, where myAddress is
+  // whatever the wallet bridge returned (getNodeAddress) — which is NOT
+  // guaranteed to equal req.user.usernode_pubkey (different formats / linkage).
+  // So we trust the client-supplied `from` here (staging-only fake data); it's
+  // the only value certain to match. Fall back to the JWT wallet, then force the
+  // fixed demo wallet in the demo identity.
+  let from = (typeof body.from === 'string' && body.from.trim())
+    ? body.from.trim()
+    : (req.user && req.user.usernode_pubkey);
+  if (req.query.demo === '1') from = STAGING_DEMO_ADDR;
+  if (!from || from.length > 128) return res.status(400).json({ error: 'no wallet address' });
+
+  // The player's guess is filtered out of /__numguess/state for any UNNAMED
+  // player (isHiddenFromPublic), so a reviewer with no username would never see
+  // their own guess land and confirmation would time out. Ensure this address is
+  // a named player by seeding a username for it (idempotent; no-op if already
+  // named — e.g. the demo wallet, which is seeded as you_demo).
+  ensureStagingUsername(from, req.user && req.user.username);
+
+  const round = game.rounds.get(roundId);
+  if (!round) return res.status(404).json({ error: 'no such round' });
+  if (round.endedAt) return res.status(409).json({ error: 'round already ended' });
+
+  const range = round.range || 100;
+  if (!Number.isFinite(guess) || guess < 1 || guess > range) {
+    return res.status(400).json({ error: `guess must be between 1 and ${range}` });
+  }
+
+  const maxGuesses = round.maxGuessesPerPlayer || 1;
+  const used = round.guesses.filter((g) => g.from === from).length;
+  if (used >= maxGuesses) {
+    return res.status(409).json({ error: 'no guesses remaining this round' });
+  }
+
+  // Deterministic id keyed on round+player+guess so a re-tap / double-submit of
+  // the same guess dedupes (via rawTxIds + seenTxIds) instead of double-counting.
+  // Same shape as the staging seed txs so it flows through processTransaction.
+  const txId = `staging-live-${roundId}-${from.slice(-8)}-${guess}`;
+  const before = round.guesses.length;
+  numguessCache.injectSeedTransactions([{
+    id: txId,
+    to: APP_PUBKEY,
+    from_pubkey: from,
+    amount: 1,
+    memo: JSON.stringify({ app: 'numguess', type: 'guess', round: roundId, guess }),
+    timestamp_ms: Date.now(),
+  }]);
+
+  const after = game.rounds.get(roundId);
+  const landed = after.guesses.some((g) => g.from === from && g.guess === guess);
+  const duplicate = after.guesses.length === before;
+  res.json({ ok: true, landed, duplicate });
 });
 
 // Mock-enabled probe — the hosted bridge probes this on startup to decide
