@@ -52,6 +52,18 @@ shared understanding of what this app is for)_
   rather than failing. Keep deriving *gameplay* state from the chain —
   only durable per-user records belong in `game_results`.
 
+- **Vendored divergence — `lib/dapp-server.js` `handleExplorerProxy`
+  has a request timeout.** The upstream copy proxies explorer requests
+  with no socket timeout, so a stalled/black-holed explorer host would
+  hang the wallet bridge's post-send inclusion poll indefinitely —
+  surfacing as "Place Guess spins forever and returns nothing." We
+  added an `opts.timeoutMs` (passed as `12000` from `server.js`) that
+  aborts the upstream request and returns `504` so the client falls
+  back to `/__numguess/state` reconciliation. If you ever re-vendor
+  this file from `usernode-dapp-starter`, **re-apply the timeout** (or,
+  better, upstream it to canonical first) — dropping it reintroduces
+  the hang.
+
 _(optional — e.g. "all currency values stored as integer cents, not
 floats"; "the `posts` table is append-only"; "avoid adding new
 dependencies"; etc.)_
