@@ -180,6 +180,11 @@
       "expectText": "Your guess is locked in"
     },
     {
+      "name": "Demo auto-guess lands via the staging mock ledger without console errors",
+      "path": "/?demo=1&demoAutoGuess=1",
+      "expectSelector": "#guess-btn"
+    },
+    {
       "name": "Leaderboard renders with only named Usernode players",
       "path": "/?demo=1",
       "expectSelector": "#leaderboard-list"
