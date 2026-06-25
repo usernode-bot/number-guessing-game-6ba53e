@@ -145,6 +145,11 @@
       "expectText": "outcome"
     },
     {
+      "name": "Personal history embeds each player's individual guesses",
+      "path": "/api/my-history?demo=1",
+      "expectText": "guess_index"
+    },
+    {
       "name": "Account identity endpoint returns the signed-in username",
       "path": "/api/me?demo=1",
       "expectText": "alice_s"

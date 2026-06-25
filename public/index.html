@@ -435,11 +435,20 @@
     .mygames-summary .mg-stat strong { display: block; font-size: 1.15rem; font-weight: 800; color: var(--accent-light); }
     .mygames-summary .mg-stat small { display: block; font-size: .68rem; color: var(--text-muted); margin-top: .15rem; text-transform: uppercase; letter-spacing: .03em; }
     .mg-row {
-      display: flex; align-items: center; gap: .75rem;
       background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: .7rem .85rem; margin-bottom: .5rem;
+      border-radius: var(--radius); margin-bottom: .5rem; overflow: hidden;
     }
     .mg-row.is-winner { border-color: var(--accent); }
+    .mg-head {
+      display: flex; align-items: center; gap: .6rem;
+      padding: .7rem .85rem; width: 100%;
+    }
+    .mg-row.expandable .mg-head { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .mg-caret {
+      flex-shrink: 0; width: 1rem; text-align: center; font-size: .7rem;
+      color: var(--text-muted); transition: transform .2s; user-select: none;
+    }
+    .mg-row.is-open .mg-caret { transform: rotate(90deg); }
     .mg-row .mg-main { flex: 1; min-width: 0; }
     .mg-row .mg-round { font-weight: 800; font-size: .85rem; }
     .mg-row .mg-meta { font-size: .72rem; color: var(--text-muted); margin-top: .15rem; }
@@ -447,6 +456,24 @@
     .mg-outcome { font-size: .76rem; font-weight: 700; }
     .mg-outcome.win { color: var(--accent-light); }
     .mg-outcome.loss { color: var(--text-muted); }
+    /* Expanded per-guess detail */
+    .mg-detail {
+      border-top: 1px solid var(--border); padding: .65rem .85rem .75rem;
+      background: color-mix(in srgb, var(--bg-card) 60%, var(--bg) 40%);
+    }
+    .mg-detail-secret {
+      font-size: .72rem; color: var(--text-muted); margin-bottom: .5rem;
+    }
+    .mg-detail-secret strong { color: var(--accent-light); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .mg-guess-row {
+      display: flex; align-items: baseline; gap: .5rem;
+      font-size: .78rem; padding: .2rem 0;
+    }
+    .mg-guess-row + .mg-guess-row { border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent); }
+    .mg-guess-idx { color: var(--text-muted); font-size: .7rem; min-width: 3.4rem; }
+    .mg-guess-val { font-weight: 800; font-variant-numeric: tabular-nums; }
+    .mg-guess-dist { color: var(--text-muted); font-size: .72rem; margin-left: auto; }
+    .mg-guess-row.is-hit .mg-guess-val { color: var(--accent-light); }
     /* ---- Bottom Nav ---- */
     .bottom-nav {
       position: fixed; bottom: 0; left: 0; right: 0;
@@ -2097,6 +2124,16 @@ function toggleHist(id) {
 
 // ---- My Games (personal history) ----
 let myGamesData = null;
+// round_ids whose per-guess detail is currently expanded. Kept across the poll
+// loop's re-renders so an open row stays open while the tab is refreshed.
+const myGamesExpanded = new Set();
+
+function toggleMyGameRow(roundId) {
+  const id = Number(roundId);
+  if (myGamesExpanded.has(id)) myGamesExpanded.delete(id);
+  else myGamesExpanded.add(id);
+  renderMyGames();
+}
 
 async function refreshMyGames() {
   const list = document.getElementById('mygames-list');
@@ -2173,12 +2210,46 @@ function renderMyGames() {
       outcomeHtml = '<span class="mg-outcome loss">Lost' + best + '</span>';
     }
 
-    return '<div class="mg-row' + (r.won ? ' is-winner' : '') + '">' +
-      '<div class="mg-main">' +
-        '<div class="mg-round">Round ' + r.round_id + '</div>' +
-        '<div class="mg-meta">' + escapeHtml(tags) + (tags ? ' · ' : '') + guesses + (date ? ' · ' + date : '') + '</div>' +
+    // Per-guess detail is opt-in: only rows that actually have guesses are
+    // expandable. Older rows / DB-disabled edge cases collapse the caret to a
+    // no-op and just show the summary line.
+    const myGuesses = Array.isArray(r.guesses) ? r.guesses : [];
+    const expandable = myGuesses.length > 0;
+    const open = expandable && myGamesExpanded.has(Number(r.round_id));
+    const caret = expandable ? '<span class="mg-caret">▶</span>' : '';
+    const onclick = expandable ? ' onclick="toggleMyGameRow(' + r.round_id + ')"' : '';
+
+    let detailHtml = '';
+    if (open) {
+      const secretLine = (r.secret != null)
+        ? '<div class="mg-detail-secret">Secret number: <strong>' + r.secret + '</strong></div>'
+        : '';
+      const guessRows = myGuesses.map((g, i) => {
+        const idx = g.guess_index != null ? g.guess_index : (i + 1);
+        const hit = g.distance === 0;
+        const distPart = g.distance != null
+          ? (hit ? '🎯' : g.distance + ' away')
+          : '';
+        return '<div class="mg-guess-row' + (hit ? ' is-hit' : '') + '">' +
+          '<span class="mg-guess-idx">Guess ' + idx + '</span>' +
+          '<span class="mg-guess-val">' + g.guess + '</span>' +
+          (distPart ? '<span class="mg-guess-dist">' + distPart + '</span>' : '') +
+        '</div>';
+      }).join('');
+      detailHtml = '<div class="mg-detail">' + secretLine + guessRows + '</div>';
+    }
+
+    return '<div class="mg-row' + (r.won ? ' is-winner' : '') +
+        (expandable ? ' expandable' : '') + (open ? ' is-open' : '') + '">' +
+      '<div class="mg-head"' + onclick + '>' +
+        caret +
+        '<div class="mg-main">' +
+          '<div class="mg-round">Round ' + r.round_id + '</div>' +
+          '<div class="mg-meta">' + escapeHtml(tags) + (tags ? ' · ' : '') + guesses + (date ? ' · ' + date : '') + '</div>' +
+        '</div>' +
+        '<div class="mg-right">' + outcomeHtml + '</div>' +
       '</div>' +
-      '<div class="mg-right">' + outcomeHtml + '</div>' +
+      detailHtml +
     '</div>';
   }).join('');
 }
