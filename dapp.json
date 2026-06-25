@@ -177,7 +177,7 @@
     {
       "name": "Relay-timeout recovery still confirms the guess (locked in)",
       "path": "/?demo=1&demoTimeout=1&demoAutoGuess=1",
-      "expectText": "Your guess is locked in"
+      "expectText": "Locked in"
     },
     {
       "name": "Demo auto-guess lands via the staging mock ledger without console errors",
