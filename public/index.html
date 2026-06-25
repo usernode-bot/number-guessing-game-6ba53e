@@ -1324,7 +1324,11 @@ async function postStagingGuess(roundId, guess) {
         'content-type': 'application/json',
         'x-usernode-token': window._ngToken || '',
       },
-      body: JSON.stringify({ round: roundId, guess: guess }),
+      // Send our own wallet address so the server attributes the guess to
+      // EXACTLY the address guessLanded() matches on (myAddress). Without this
+      // the server would use the JWT pubkey, which can differ from the bridge
+      // wallet address and silently break the "is this mine?" confirmation.
+      body: JSON.stringify({ round: roundId, guess: guess, from: myAddress }),
     });
     if (!res.ok) {
       console.warn('[postStagingGuess] server returned', res.status);

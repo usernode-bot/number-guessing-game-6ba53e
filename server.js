@@ -1100,6 +1100,25 @@ app.post('/__numguess/admin/start', async (req, res) => {
 // lifetime (survives reloads). It is a strict no-op in production: 404 unless
 // IS_STAGING. POST under no public-path exemption, so the deny-by-default
 // middleware forces auth and populates req.user.
+// Make a staging wallet address a NAMED player (so its guesses aren't hidden by
+// the named-players-only filter). Idempotent: a no-op if the address already has
+// a username. Staging-only — only ever called from the endpoint below.
+function ensureStagingUsername(pubkey, preferredName) {
+  const map = (usernamesCache.getStateResponse() || {}).usernames || {};
+  if (map[pubkey]) return; // already named
+  const name = (preferredName && String(preferredName).trim())
+    ? String(preferredName).trim().slice(0, 32)
+    : ('you_' + pubkey.slice(-6));
+  usernamesCache.injectSeedTransactions([{
+    id: 'staging-live-uname-' + pubkey.slice(-16),
+    to: usernamesCache.usernamesPubkey,
+    from_pubkey: pubkey,
+    amount: 1,
+    memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: name }),
+    timestamp_ms: Date.now(),
+  }]);
+}
+
 app.post('/__numguess/staging/guess', (req, res) => {
   if (!IS_STAGING) return res.status(404).json({ error: 'not found' });
 
@@ -1107,12 +1126,25 @@ app.post('/__numguess/staging/guess', (req, res) => {
   const roundId = body.round;
   const guess = parseInt(body.guess, 10);
 
-  // Attribute the guess. In the demo identity (?demo=1) the client's myAddress
-  // is the fixed demo wallet, so ingest under that address to keep the client's
-  // "is this mine?" match working; otherwise use the signed-in player's wallet.
-  let from = req.user && req.user.usernode_pubkey;
+  // Attribute the guess to EXACTLY the address the client recognises as its own.
+  // guessLanded() on the client keys on `from === myAddress`, where myAddress is
+  // whatever the wallet bridge returned (getNodeAddress) — which is NOT
+  // guaranteed to equal req.user.usernode_pubkey (different formats / linkage).
+  // So we trust the client-supplied `from` here (staging-only fake data); it's
+  // the only value certain to match. Fall back to the JWT wallet, then force the
+  // fixed demo wallet in the demo identity.
+  let from = (typeof body.from === 'string' && body.from.trim())
+    ? body.from.trim()
+    : (req.user && req.user.usernode_pubkey);
   if (req.query.demo === '1') from = STAGING_DEMO_ADDR;
-  if (!from) return res.status(400).json({ error: 'no linked wallet' });
+  if (!from || from.length > 128) return res.status(400).json({ error: 'no wallet address' });
+
+  // The player's guess is filtered out of /__numguess/state for any UNNAMED
+  // player (isHiddenFromPublic), so a reviewer with no username would never see
+  // their own guess land and confirmation would time out. Ensure this address is
+  // a named player by seeding a username for it (idempotent; no-op if already
+  // named — e.g. the demo wallet, which is seeded as you_demo).
+  ensureStagingUsername(from, req.user && req.user.username);
 
   const round = game.rounds.get(roundId);
   if (!round) return res.status(404).json({ error: 'no such round' });
