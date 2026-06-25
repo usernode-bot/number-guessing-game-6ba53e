@@ -180,6 +180,16 @@
       "expectText": "Your guess is locked in"
     },
     {
+      "name": "Dev-mode badge renders in the staging preview",
+      "path": "/?demo=1",
+      "expectSelector": "#dev-mode-badge"
+    },
+    {
+      "name": "Dev-mode guess is recorded server-side and confirms (locked in)",
+      "path": "/?demo=1&demoAutoGuess=1",
+      "expectText": "Your guess is locked in"
+    },
+    {
       "name": "Leaderboard renders with only named Usernode players",
       "path": "/?demo=1",
       "expectSelector": "#leaderboard-list"

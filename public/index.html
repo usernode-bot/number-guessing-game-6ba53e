@@ -155,6 +155,15 @@
       white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
       cursor: default; user-select: none;
     }
+    /* Staging-only indicator: guesses are recorded into the preview sandbox,
+       not the live network. Never shown in production (gated on gameState.staging). */
+    .dev-mode-badge {
+      display: inline-flex; align-items: center; gap: .3rem;
+      background: rgba(124, 58, 237, .15); border: 1px solid var(--border-strong, #7c3aed);
+      border-radius: 2rem; padding: .3rem .6rem;
+      font-size: .68rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+      color: #a78bfa; white-space: nowrap; user-select: none; flex-shrink: 0;
+    }
     .theme-btn {
       background: var(--bg-card); border: 1px solid var(--border); border-radius: .7rem;
       color: var(--text-muted); padding: .4rem .55rem; cursor: pointer; font-size: .95rem; line-height: 1;
@@ -562,6 +571,8 @@
   <div class="account-badge" id="account-badge" style="display:none">
     <span id="account-badge-name"></span>
   </div>
+  <!-- Staging dev-mode indicator; shown only when the server reports staging. -->
+  <span class="dev-mode-badge" id="dev-mode-badge" style="display:none" title="Guesses are recorded into the staging preview sandbox, not the live network.">🛠 Dev mode</span>
   <div class="username-pill" id="username-pill" onclick="onHeaderPillClick()">
     <span>👤</span>
     <span id="username-display">…</span>
@@ -810,7 +821,14 @@ let DEMO = false;
 // timeout, so the graceful-recovery path can be screenshotted/tested.
 let demoForceTimeout = false;
 const DEMO_HOLD_MS = 2500;
-const DEMO_ADDR = 'utpk1demoplayer0000000000000000000000000000000000000000demo01';
+// Demo wallet address. Deliberately equal to the server's named demo identity
+// pubkey (STAGING_DEMO_USER.usernode_pubkey = p1 = "alice_s") so a guess placed
+// in demo mode is (a) recorded under a real, named seeded player — visible on
+// the leaderboard and tied to the demo badge — and (b) matched by guessLanded(),
+// which keys confirmation on `from === myAddress`. Misaligning these would land
+// demo guesses under an unnamed pubkey that the public views hide and that
+// reconciliation could never confirm.
+const DEMO_ADDR = 'utpk1stagingplayer000000000000000000000000000000000000000001';
 // Defensive, belt-and-suspenders mirror of the server-side block-list. The
 // authoritative hide happens server-side (chain-derived state + the usernames
 // directory both omit blocked players); this guard only ensures a blocked name
@@ -1259,14 +1277,11 @@ function guessLanded(roundId, value) {
 // Bounded reconciliation: treat /__numguess/state as the source of truth for
 // "did my guess land?", decoupled from whether the bridge promise resolved.
 // Polls refreshState() until the guess appears or `deadline` passes. Never
-// resubmits — it only observes. In DEMO mode there is no server to poll, so we
-// simulate the guess landing by applying it optimistically, which lets the
-// recovery path be exercised end-to-end via ?demoTimeout=1.
+// resubmits — it only observes. In DEMO (staging dev mode) the guess is recorded
+// server-side by submitDevGuess() before this runs, so the SAME chain-state poll
+// works there too — it genuinely appears in /__numguess/state — which is what
+// lets the ?demoTimeout=1 recovery path resolve to a real "locked in".
 async function awaitGuessConfirmed(roundId, value, deadline) {
-  if (DEMO) {
-    applyOptimisticGuess(roundId, value);
-    return guessLanded(roundId, value);
-  }
   if (guessLanded(roundId, value)) return true;
   while (Date.now() < deadline) {
     try { await refreshState(); } catch {}
@@ -1274,6 +1289,33 @@ async function awaitGuessConfirmed(roundId, value, deadline) {
     await new Promise((r) => setTimeout(r, GUESS_RECONCILE_INTERVAL_MS));
   }
   return guessLanded(roundId, value);
+}
+
+// Staging dev mode only: record a guess into the server-side mock ledger
+// (POST /__numguess/dev/guess), which injects it into the in-memory chain cache
+// so it confirms and persists like a real on-chain guess. Returns true when the
+// server vouched for the write (an authoritative confirmation, like the bridge
+// handing back a tx). No-op-ish failure returns false so the caller falls back
+// to chain-state reconciliation. Never called outside DEMO.
+async function submitDevGuess(roundId, value) {
+  try {
+    const headers = { 'content-type': 'application/json' };
+    if (window._ngToken) headers['x-usernode-token'] = window._ngToken;
+    const res = await fetch('/__numguess/dev/guess' + (DEMO ? '?demo=1' : ''), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ round: roundId, guess: value, from: myAddress }),
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      console.warn('[submitDevGuess] server rejected:', res.status, detail && detail.error);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[submitDevGuess] failed:', e && e.message ? e.message : e);
+    return false;
+  }
 }
 
 // DEMO-only: guesses placed this session. Real chain state never contains them,
@@ -1373,10 +1415,22 @@ async function placeGuess() {
     // path that resolves with no tx).
     let confirmed = false;
     if (DEMO) {
+      // Staging dev mode: there is no usable wallet/testnet round-trip in a PR
+      // preview, so instead of the bridge we record the guess server-side via the
+      // staging-only ledger endpoint. It injects the guess into the same in-memory
+      // chain cache the rest of the app reads, so it genuinely lands (and persists
+      // across reloads) — then we confirm through the real reconciliation path.
+      //
+      // Record FIRST, then optionally simulate the relay hiccup: that way the
+      // ?demoTimeout=1 recovery (which throws below and reconciles in the catch)
+      // still finds the already-recorded guess and ends at a real "locked in".
+      const recorded = await submitDevGuess(round.id, guess);
       if (demoForceTimeout) await demoRelayTimeout();
       await demoHold();
-      // Demo "lands" the guess by reconciling against the optimistic patch.
-      confirmed = await awaitGuessConfirmed(round.id, guess, Date.now() + GUESS_RECONCILE_MS);
+      applyOptimisticGuess(round.id, guess);
+      // A successful server write is an authoritative confirmation; otherwise fall
+      // back to observing chain-derived state.
+      confirmed = recorded || await awaitGuessConfirmed(round.id, guess, Date.now() + GUESS_RECONCILE_MS);
     } else {
       const result = await window.sendTransaction(appPubkey, 1, memoStr, {
         ...TX_SEND_OPTS,
@@ -1630,8 +1684,14 @@ async function refreshState() {
     }
 
     maybeActivateDemo();
-    // Keep demo guesses visible across polls — chain-derived demo state never
-    // carries them, so without this the poll loop would wipe a confirmed guess.
+    // Staging dev-mode indicator: shown whenever the server reports staging
+    // (covers both the ?demo=1 reviewer identity and a reviewer signed in as
+    // themselves). Never appears in production, which never sets staging:true.
+    const devBadge = document.getElementById('dev-mode-badge');
+    if (devBadge) devBadge.style.display = gameState.staging ? 'inline-flex' : 'none';
+    // Belt-and-suspenders: dev-mode guesses are now recorded server-side and
+    // appear in chain-derived state on their own, but re-applying keeps the
+    // confirmed guess visible during the brief window before the next poll.
     reapplyDemoGuesses();
     render();
     document.getElementById('reconnect-bar').classList.remove('show');

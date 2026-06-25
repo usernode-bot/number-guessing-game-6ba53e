@@ -1076,6 +1076,72 @@ app.post('/__numguess/admin/start', async (req, res) => {
   }
 });
 
+// Staging-only dev-mode guess ledger.
+//
+// In a PR preview there is no usable wallet/testnet round-trip, so the hosted
+// bridge's sendTransaction never lands a guess in the in-memory chain cache and
+// a placed guess can never confirm or persist. This endpoint records a guess
+// directly into that same cache (via injectSeedTransactions, which runs
+// game.processTransaction, adds the tx to rawTxs and notifies /waitForTx waiters),
+// so a guess placed during review confirms through the normal chain-state
+// reconciliation path and survives reloads — exactly like a real on-chain guess.
+//
+// Strictly a no-op outside staging: registered only behind IS_STAGING and, even
+// then, guarded again at call time. Production keeps the real wallet send path.
+// Auth is enforced by the deny-by-default middleware (POST under no public path),
+// so req.user is always present here.
+app.post('/__numguess/dev/guess', (req, res) => {
+  if (!IS_STAGING) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const body = req.body || {};
+  const roundId = parseInt(body.round, 10);
+  const guess = parseInt(body.guess, 10);
+  // Attribution: callers may pass an explicit `from` (the ?demo=1 path sends the
+  // named demo identity's pubkey so the guess ties to alice_s); otherwise fall
+  // back to the signed-in reviewer's own linked wallet.
+  const from = (typeof body.from === 'string' && body.from) || (req.user && req.user.usernode_pubkey);
+
+  if (!from) {
+    return res.status(400).json({ error: 'No wallet to attribute the guess to (link a wallet or pass `from`).' });
+  }
+  if (!Number.isFinite(roundId)) {
+    return res.status(400).json({ error: 'Invalid round.' });
+  }
+  const round = game.rounds.get(roundId);
+  if (!round) {
+    return res.status(404).json({ error: 'Round not found.' });
+  }
+  if (round.endedAt) {
+    return res.status(409).json({ error: 'This round has ended.' });
+  }
+  const range = round.range || 100;
+  if (!Number.isFinite(guess) || guess < 1 || guess > range) {
+    return res.status(400).json({ error: 'Guess must be between 1 and ' + range + '.' });
+  }
+  const priorCount = (round.rawGuessCounts && round.rawGuessCounts[from]) || 0;
+  const maxGuesses = round.maxGuessesPerPlayer || 1;
+  if (priorCount >= maxGuesses) {
+    return res.status(409).json({ error: 'You have used all your guesses this round.' });
+  }
+
+  // Idempotent id: a retry of the same logical guess (same player + round +
+  // sequence) re-injects the same id, which the cache's rawTxIds dedup drops, so
+  // a network retry can't double-count. Legitimate repeat guesses on multi-guess
+  // rounds advance the sequence and get a fresh id.
+  const tx = {
+    id: 'dev-guess-' + roundId + '-' + from.slice(-12) + '-' + priorCount,
+    to: APP_PUBKEY,
+    from_pubkey: from,
+    amount: 1,
+    memo: JSON.stringify({ app: 'numguess', type: 'guess', round: roundId, guess }),
+    timestamp_ms: Date.now(),
+  };
+  numguessCache.injectSeedTransactions([tx]);
+  console.log('[dev-guess] recorded guess', { round: roundId, guess, from: from.slice(0, 16) + '…' });
+  res.json({ ok: true, tx });
+});
+
 // Mock-enabled probe — the hosted bridge probes this on startup to decide
 // whether to route sendTransaction through a local mock layer. This app has
 // no mock layer; it runs exclusively in live Usernode DApps mode.
