@@ -258,6 +258,41 @@ function createGame(opts) {
     return stats;
   }
 
+  function getPlayerStatsForTrackAndDifficulty(track, difficulty) {
+    if (!track || track === 'all') return getPlayerStatsForDifficulty(difficulty);
+    const stats = {};
+    for (const [, r] of rounds) {
+      if (!r.endedAt || !r.winner) continue;
+      if (r.durationTrack !== track) continue;
+      if ((r.difficulty || 'medium') !== difficulty) continue;
+      const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
+      const w = r.winner;
+      if (!isHidden(w)) {
+        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        stats[w].won++;
+        stats[w].tokensWon += r.pot || 0;
+        if (secret != null && r.winnerGuess != null) {
+          stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+        }
+        const winGuessCount = r.rawGuessCounts ? (r.rawGuessCounts[w] || 1) : 1;
+        stats[w].bestWinGuessCount = stats[w].bestWinGuessCount === null
+          ? winGuessCount
+          : Math.min(stats[w].bestWinGuessCount, winGuessCount);
+      }
+      for (const g of r.guesses) {
+        if (isHidden(g.from)) continue;
+        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        if (secret != null) {
+          stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
+        }
+      }
+    }
+    for (const k of Object.keys(stats)) {
+      if (stats[k].bestDist === Infinity) stats[k].bestDist = null;
+    }
+    return stats;
+  }
+
   // ---------------------------------------------------------------------------
   // Win streaks — derived purely from completed on-chain rounds
   // ---------------------------------------------------------------------------
@@ -436,7 +471,19 @@ function createGame(opts) {
     }
     const difficulties = {};
     for (const diff of ['easy', 'medium', 'hard']) {
-      difficulties[diff] = { playerStats: getPlayerStatsForDifficulty(diff) };
+      const byTrack = {};
+      for (const track of TRACK_KEYS) {
+        const trackStreaks = getTrackStreaks(track);
+        const streaks = {};
+        for (const [pk, s] of Object.entries(trackStreaks)) {
+          if (s.bestStreak > 0) streaks[pk] = { bestStreak: s.bestStreak };
+        }
+        byTrack[track] = {
+          playerStats: getPlayerStatsForTrackAndDifficulty(track, diff),
+          streaks,
+        };
+      }
+      difficulties[diff] = { playerStats: getPlayerStatsForDifficulty(diff), byTrack };
     }
     return {
       appPubkey,
@@ -465,6 +512,7 @@ function createGame(opts) {
     getPastRoundsForTrack,
     getPlayerStatsForTrack,
     getPlayerStatsForDifficulty,
+    getPlayerStatsForTrackAndDifficulty,
     getTrackStreaks,
     getMyStreaks,
     getStateResponse,

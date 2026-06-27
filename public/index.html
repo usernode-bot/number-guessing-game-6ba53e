@@ -396,6 +396,7 @@
     .lb-info { flex: 1; overflow: hidden; }
     .lb-name { font-size: .92rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .lb-meta { font-size: .73rem; color: var(--text-muted); margin-top: .15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .streak-badge { font-size: .72rem; }
     .lb-best-win { text-align: right; flex-shrink: 0; }
     .lb-best-win span { display: block; font-size: .92rem; font-weight: 800; color: var(--accent-light); white-space: nowrap; font-variant-numeric: tabular-nums; }
     .lb-best-win small { display: block; font-size: .62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
@@ -729,6 +730,13 @@
 
   <!-- Leaderboard Panel -->
   <div class="panel" id="panel-leaderboard">
+    <div class="segment track-selector" id="lb-track-selector">
+      <button class="seg-btn active" id="lb-track-all" onclick="setLbTrack('all')">All</button>
+      <button class="seg-btn" id="lb-track-1h" onclick="setLbTrack('1h')">1H</button>
+      <button class="seg-btn" id="lb-track-6h" onclick="setLbTrack('6h')">6H</button>
+      <button class="seg-btn" id="lb-track-1d" onclick="setLbTrack('1d')">1D</button>
+      <button class="seg-btn" id="lb-track-1w" onclick="setLbTrack('1w')">1W</button>
+    </div>
     <div class="segment track-selector" id="lb-difficulty-selector">
       <button class="seg-btn" id="lb-easy" onclick="setLbDifficulty('easy')">Easy</button>
       <button class="seg-btn active" id="lb-medium" onclick="setLbDifficulty('medium')">Medium</button>
@@ -889,6 +897,7 @@ let pickerSegment = 'medium';
 
 let selectedTrack = '1d';
 let selectedDifficulty = 'medium';
+let selectedLbTrack = 'all';
 let selectedHistTrack = '1d';
 
 let winAutoSwitchTimer = null;
@@ -931,6 +940,14 @@ function setGameTrack(track) {
     document.getElementById('gs-' + t).classList.toggle('active', t === track);
   });
   if (gameState) render();
+}
+
+function setLbTrack(track) {
+  selectedLbTrack = track;
+  ['all', '1h', '6h', '1d', '1w'].forEach((t) => {
+    document.getElementById('lb-track-' + t).classList.toggle('active', t === track);
+  });
+  if (gameState) renderLeaderboard();
 }
 
 function setLbDifficulty(diff) {
@@ -1921,6 +1938,7 @@ function render() {
                 document.getElementById('panel-' + tab).classList.toggle('active', tab === 'leaderboard');
                 document.getElementById('nav-' + tab).classList.toggle('active', tab === 'leaderboard');
               });
+              setLbTrack(t);
               setLbDifficulty(wonDifficulty);
               renderLeaderboard();
               setTimeout(() => {
@@ -2138,8 +2156,11 @@ function hasCustomName(addr) {
 
 function renderLeaderboard() {
   if (!gameState || !gameState.difficulties) return;
-  const td = gameState.difficulties[selectedDifficulty] || {};
-  const stats = td.playerStats || {};
+  const diffData = gameState.difficulties[selectedDifficulty] || {};
+  const useTrack = selectedLbTrack && selectedLbTrack !== 'all';
+  const trackData = useTrack ? ((diffData.byTrack || {})[selectedLbTrack] || {}) : null;
+  const stats = useTrack ? (trackData.playerStats || {}) : (diffData.playerStats || {});
+  const streaks = useTrack ? (trackData.streaks || {}) : {};
   const entries = Object.entries(stats)
     .map(([pubkey, s]) => ({ pubkey, ...s }))
     .filter((e) => e.bestWinGuessCount != null)
@@ -2167,11 +2188,13 @@ function renderLeaderboard() {
     const isMe = e.pubkey === myAddress;
     const bestWin = e.bestWinGuessCount === 1 ? '1 guess' : e.bestWinGuessCount + ' guesses';
     const best = e.bestDist != null ? e.bestDist + ' off' : '—';
+    const streak = streaks[e.pubkey] && streaks[e.pubkey].bestStreak > 0 ? streaks[e.pubkey].bestStreak : 0;
+    const streakBadge = streak > 0 ? ' <span class="streak-badge">🔥' + streak + '</span>' : '';
     return '<div class="lb-row' + (isMe ? ' is-me' : '') + '">' +
       '<div class="lb-rank ' + rankClass + '">' + rank + '</div>' +
       '<div class="lb-info">' +
         '<div class="lb-name">' + escapeHtml(name) + (isMe ? ' <strong>(you)</strong>' : '') + '</div>' +
-        '<div class="lb-meta">' + e.won + ' win' + (e.won !== 1 ? 's' : '') + ' · ' + e.tokensWon + ' tokens · best: ' + best + '</div>' +
+        '<div class="lb-meta">' + e.won + ' win' + (e.won !== 1 ? 's' : '') + ' · ' + e.tokensWon + ' tokens · best: ' + best + streakBadge + '</div>' +
       '</div>' +
       '<div class="lb-best-win"><span>' + bestWin + '</span><small>best win</small></div>' +
       '</div>';

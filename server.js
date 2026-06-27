@@ -747,6 +747,17 @@ function injectStagingSeeds() {
     { id: 'staging-r42-g3', to: APP_PUBKEY, from_pubkey: p5, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 42, guess: 58 }), timestamp_ms: now - 16 * day + 3 * hour },
     { id: 'staging-r42-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 42, secret: 50, winner: p13, winner_guess: 50, pot: 3, participants: 3 }), timestamp_ms: now - 15 * day },
 
+    // ---- 1W TRACK — completed seed round so the 1W leaderboard filter isn't always empty ----
+    // Round 35 — 1w — completed (started 10 days ago, ended 3 days ago) — secret=50 — bob_s wins with 2 guesses.
+    // Seed hash 0x00000031 % 100 + 1 = 49 + 1 = 50. alice_s and carol_s also guess so the board has
+    // multiple participants. Gives the 1W track tab a populated leaderboard entry for staging review.
+    { id: 'staging-r35-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 35, seed_hash: '00000031' + 'a'.repeat(56), active_duration_ms: 604800000, min_players: 1, max_guesses_per_player: 10, mode: 'normal', duration_track: '1w' }), timestamp_ms: now - 10 * day },
+    { id: 'staging-r35-g1', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 35, guess: 60 }), timestamp_ms: now - 10 * day + hour },
+    { id: 'staging-r35-g2', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 35, guess: 45 }), timestamp_ms: now - 10 * day + 2 * hour },
+    { id: 'staging-r35-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 35, guess: 55 }), timestamp_ms: now - 10 * day + 3 * hour },
+    { id: 'staging-r35-g4', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 35, guess: 50 }), timestamp_ms: now - 10 * day + 4 * hour },
+    { id: 'staging-r35-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 35, secret: 50, winner: p2, winner_guess: 50, pot: 4, participants: 3 }), timestamp_ms: now - 3 * day },
+
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
     { id: 'staging-u2', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'bob_s' }), timestamp_ms: now - 3 * day },
