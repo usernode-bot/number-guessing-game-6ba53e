@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -65,50 +65,63 @@
 
   <style>
     :root {
-      --accent: #14b8a6;
-      --accent-light: #2dd4bf;
-      --accent-dark: #0d9488;
-      --accent-glow: rgba(20,184,166,0.30);
-      --accent-soft: rgba(20,184,166,0.12);
-      --accent-soft-border: rgba(20,184,166,0.28);
-      --bg: #0a0f1a;
-      --bg-grad: radial-gradient(120% 80% at 50% -10%, rgba(20,184,166,0.10) 0%, rgba(20,184,166,0) 55%);
-      --bg-elev: #111827;
-      --bg-card: #151d2c;
-      --bg-card-hover: #1b2638;
-      --text: #f1f5f9;
-      --text-muted: #93a4bd;
-      --text-faint: #4b5a72;
-      --border: rgba(148,163,184,0.14);
-      --border-strong: rgba(148,163,184,0.30);
-      --shadow: 0 10px 34px rgba(0,0,0,0.45);
+      /* Softer dark theme — muted periwinkle accent, gentler glow. */
+      --accent: #8b7cf0;
+      --accent-light: #b3a6f7;
+      --accent-dark: #7468d6;
+      --accent-glow: rgba(139,124,240,0.22);
+      --accent-soft: rgba(139,124,240,0.12);
+      --accent-soft-border: rgba(139,124,240,0.26);
+      /* Calm secondary pastels (shared with light theme below). */
+      --mint: #6fd6b6;
+      --sky: #79c6ee;
+      --peach: #f6b89a;
+      --calm: #b3a6f7;
+      --bg: #0a0b14;
+      --bg-grad: radial-gradient(130% 90% at 50% -5%, rgba(139,124,240,0.12) 0%, rgba(139,124,240,0.03) 50%, transparent 72%);
+      --bg-elev: #12141f;
+      --bg-card: #161927;
+      --bg-card-hover: #1c2032;
+      --text: #e2e6f3;
+      --text-muted: #8b97b5;
+      --text-faint: #3a4258;
+      --border: rgba(120,135,200,0.14);
+      --border-strong: rgba(140,155,220,0.26);
+      --shadow: 0 12px 40px rgba(0,0,0,0.50);
       --shadow-sm: 0 2px 14px rgba(0,0,0,0.28);
-      --radius: 1.25rem;
-      --radius-sm: 0.8rem;
+      --radius: 1.4rem;
+      --radius-sm: 0.9rem;
       --nav-h: 64px;
       --safe-b: env(safe-area-inset-bottom, 0px);
       --safe-t: env(safe-area-inset-top, 0px);
       --maxw: 540px;
     }
     [data-theme="light"] {
-      --accent: #0d9488;
-      --accent-light: #14b8a6;
-      --accent-dark: #0f766e;
-      --accent-glow: rgba(13,148,136,0.22);
-      --accent-soft: rgba(13,148,136,0.10);
-      --accent-soft-border: rgba(13,148,136,0.25);
-      --bg: #eef2f7;
-      --bg-grad: radial-gradient(120% 80% at 50% -10%, rgba(13,148,136,0.10) 0%, rgba(13,148,136,0) 55%);
+      /* Calm light pastel: muted periwinkle-lavender accent, no neon glow,
+         soft off-white surfaces, diffuse low-opacity shadows. */
+      --accent: #8b7cf0;
+      --accent-light: #7d6ee8;
+      --accent-dark: #6a5bd0;
+      --accent-glow: rgba(139,124,240,0.16);
+      --accent-soft: rgba(139,124,240,0.10);
+      --accent-soft-border: rgba(139,124,240,0.22);
+      /* Secondary pastels for badges / tints. */
+      --mint: #4cc4a0;
+      --sky: #5aa9dd;
+      --peach: #e89a72;
+      --calm: #8b7cf0;
+      --bg: #f7f5fb;
+      --bg-grad: radial-gradient(135% 85% at 50% -8%, rgba(139,124,240,0.07) 0%, rgba(167,196,240,0.04) 45%, transparent 72%);
       --bg-elev: #ffffff;
       --bg-card: #ffffff;
-      --bg-card-hover: #f1f5f9;
-      --text: #0f172a;
-      --text-muted: #5a6b82;
-      --text-faint: #b4c0d0;
-      --border: rgba(15,23,42,0.10);
-      --border-strong: rgba(15,23,42,0.18);
-      --shadow: 0 10px 30px rgba(15,23,42,0.10);
-      --shadow-sm: 0 2px 12px rgba(15,23,42,0.06);
+      --bg-card-hover: #f4f2fc;
+      --text: #3a3357;
+      --text-muted: #847da3;
+      --text-faint: #c5c1da;
+      --border: rgba(60,50,110,0.08);
+      --border-strong: rgba(60,50,110,0.15);
+      --shadow: 0 14px 40px rgba(90,80,150,0.10);
+      --shadow-sm: 0 3px 16px rgba(90,80,150,0.07);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 16px; -webkit-text-size-adjust: 100%; }
@@ -171,10 +184,10 @@
     .panel {
       display: none; padding: 1rem max(1rem, env(safe-area-inset-left)) 1.5rem max(1rem, env(safe-area-inset-right));
       max-width: var(--maxw); margin: 0 auto;
-      animation: panel-in .28s ease;
+      animation: panel-in .42s cubic-bezier(.22,.7,.3,1);
     }
     .panel.active { display: block; }
-    @keyframes panel-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @keyframes panel-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     /* ---- Card ---- */
     .card {
       background: var(--bg-card);
@@ -191,8 +204,8 @@
     }
     .streak-bar span { font-size: .8rem; font-weight: 600; color: var(--text-muted); display: inline-flex; align-items: baseline; }
     .streak-bar strong { font-size: 1.6rem; font-weight: 900; color: var(--text); margin-left: .4rem; font-variant-numeric: tabular-nums; }
-    @keyframes streak-pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.5); color: var(--accent-light); } }
-    .streak-pop { animation: streak-pop .45s ease; display: inline-block; }
+    @keyframes streak-pop { 0%,100% { transform: scale(1); } 45% { transform: scale(1.18); color: var(--accent-light); } }
+    .streak-pop { animation: streak-pop .6s cubic-bezier(.34,1.3,.64,1); display: inline-block; }
     /* ---- Round info bar ---- */
     .round-bar {
       display: flex; align-items: center; flex-wrap: wrap;
@@ -209,13 +222,14 @@
       padding: .25rem .55rem; border-radius: 2rem;
       background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-muted);
     }
-    .mode-badge.timed { border-color: rgba(244,63,94,0.5); color: #fb7185; background: rgba(244,63,94,0.10); }
-    .mode-badge.duration { border-color: rgba(56,189,248,0.5); color: #38bdf8; background: rgba(56,189,248,0.10); }
-    .mode-badge.hard { border-color: rgba(234,179,8,0.5); color: #eab308; background: rgba(234,179,8,0.10); }
-    .countdown { font-size: .88rem; font-weight: 700; color: var(--accent-light); font-variant-numeric: tabular-nums; flex: 1; text-align: center; min-width: 60px; }
-    .countdown.urgent { color: #fb7185; }
-    @keyframes countdown-pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
-    .countdown.pulse { animation: countdown-pulse .6s ease-in-out infinite; }
+    .mode-badge.timed { border-color: color-mix(in srgb, var(--peach) 55%, transparent); color: var(--peach); background: color-mix(in srgb, var(--peach) 12%, transparent); }
+    .mode-badge.duration { border-color: color-mix(in srgb, var(--sky) 55%, transparent); color: var(--sky); background: color-mix(in srgb, var(--sky) 12%, transparent); }
+    .mode-badge.hard { border-color: color-mix(in srgb, var(--mint) 55%, transparent); color: var(--mint); background: color-mix(in srgb, var(--mint) 12%, transparent); }
+    .countdown { font-size: .88rem; font-weight: 700; color: var(--accent-light); font-variant-numeric: tabular-nums; flex: 1; text-align: center; min-width: 60px; transition: color .4s ease; }
+    /* Calm urgency: a gently deeper accent tone as time runs low — never red,
+       never blinking. */
+    .countdown.urgent { color: var(--accent-dark); }
+    .countdown.pulse { color: var(--accent-dark); }
     .players-info { font-size: .76rem; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
     .settings-btn {
       background: var(--bg-elev); border: 1px solid var(--border); border-radius: .6rem;
@@ -233,6 +247,11 @@
       padding: .35rem .8rem; background: var(--accent-soft); border-radius: 2rem;
       border: 1px solid var(--accent-soft-border);
     }
+    /* ---- Per-guess encouragement (morale only, never reveals proximity) ---- */
+    .guess-encouragement {
+      font-size: .82rem; font-weight: 600; color: var(--text-muted);
+      margin: -.4rem 0 1rem; line-height: 1.4;
+    }
     /* ---- My guesses list ---- */
     .my-guesses { margin-bottom: 1.1rem; text-align: left; }
     .my-guesses-label { font-size: .68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; margin-bottom: .5rem; }
@@ -244,6 +263,14 @@
     }
     .my-guess-val { font-weight: 800; font-size: 1.05rem; color: var(--accent-light); font-variant-numeric: tabular-nums; }
     .my-guess-tag { font-size: .7rem; font-weight: 600; color: var(--text-muted); margin-left: auto; }
+    /* Pending (optimistic) guess: dimmed until the on-chain tx is observed. */
+    .my-guess-row.is-pending { opacity: .62; border-style: dashed; }
+    .my-guess-pending-dot {
+      display: inline-block; width: .85em; height: .85em; flex: 0 0 auto;
+      border: 2px solid var(--accent-soft-border); border-top-color: var(--accent-light);
+      border-radius: 50%; animation: btn-spin .7s linear infinite;
+    }
+    .my-guess-tag.is-pending { color: var(--accent-light); }
     /* ---- Slider + hero number ---- */
     .slider-row { display: flex; flex-direction: column-reverse; align-items: stretch; gap: 1.4rem; margin-bottom: .5rem; }
     .guess-slider {
@@ -309,7 +336,7 @@
       border-radius: var(--radius-sm); padding: 1.1rem 1.25rem;
       animation: badge-in .3s ease; text-align: left;
     }
-    @keyframes badge-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes badge-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
     .locked-icon { font-size: 1.6rem; }
     .locked-text { flex: 1; }
     .locked-text strong { display: block; font-size: 1.05rem; font-weight: 800; color: var(--accent-light); }
@@ -317,34 +344,34 @@
     /* ---- Waiting state ---- */
     .waiting-notice {
       text-align: center; padding: 1.4rem 1.25rem;
-      background: rgba(234,179,8,0.10); border: 1px solid rgba(234,179,8,0.30);
+      background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
       border-radius: var(--radius-sm); margin-bottom: 1rem;
     }
     .waiting-notice .wn-icon { font-size: 1.7rem; margin-bottom: .5rem; }
-    .waiting-notice p { font-size: .86rem; font-weight: 500; color: #eab308; }
+    .waiting-notice p { font-size: .86rem; font-weight: 500; color: var(--text-muted); }
     /* ---- Time's Up banner ---- */
     .timesup-banner {
       text-align: center; padding: 1.6rem 1rem; margin-bottom: 1rem;
-      background: rgba(244,63,94,0.10); border: 1px solid rgba(244,63,94,0.35);
+      background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
       border-radius: var(--radius-sm);
-      animation: badge-in .3s ease;
+      animation: badge-in .4s ease;
     }
     .timesup-banner .tu-icon { font-size: 2.2rem; margin-bottom: .4rem; }
-    .timesup-banner .tu-title { font-size: 1.2rem; font-weight: 900; color: #fb7185; margin-bottom: .25rem; }
+    .timesup-banner .tu-title { font-size: 1.2rem; font-weight: 800; color: var(--accent); margin-bottom: .25rem; }
     .timesup-banner .tu-sub { font-size: .84rem; color: var(--text-muted); }
     /* ---- Result panel ---- */
     .result-card { padding: 2rem 1.5rem; margin-bottom: 1rem; text-align: center; }
-    .result-heading { font-size: .78rem; color: #fb7185; font-weight: 800; letter-spacing: .06em; margin-bottom: .75rem; text-transform: uppercase; }
+    .result-heading { font-size: .78rem; color: var(--accent); font-weight: 800; letter-spacing: .06em; margin-bottom: .75rem; text-transform: uppercase; }
     .result-secret { font-size: 4rem; font-weight: 900; color: var(--accent-light); line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; text-shadow: 0 4px 28px var(--accent-glow); }
     .result-label { font-size: .72rem; color: var(--text-muted); margin: .4rem 0 1.25rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
     .result-winner { font-size: 1.02rem; font-weight: 700; margin-bottom: .5rem; }
     .result-mine { font-size: .92rem; color: var(--text-muted); margin-bottom: 1rem; }
     .bullseye-badge {
       display: inline-block;
-      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      background: linear-gradient(135deg, var(--peach), var(--accent-light));
       color: #fff; font-weight: 900; font-size: .85rem; letter-spacing: .06em;
       padding: .4rem 1rem; border-radius: 2rem; margin-bottom: 1.1rem;
-      animation: badge-in .4s ease; box-shadow: 0 4px 18px rgba(239,68,68,0.4);
+      animation: badge-in .5s cubic-bezier(.34,1.3,.64,1); box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 30%, transparent);
     }
     .next-round-label { font-size: .8rem; color: var(--text-muted); margin-top: 1.1rem; }
     .result-score { font-size: 1.5rem; font-weight: 900; color: var(--accent-light); margin: .5rem 0 .15rem; font-variant-numeric: tabular-nums; }
@@ -359,11 +386,11 @@
     /* ---- Error card ---- */
     .error-card {
       padding: 1rem 1.1rem; margin-bottom: 1rem;
-      background: rgba(244,63,94,0.10); border: 1px solid rgba(244,63,94,0.30);
-      border-radius: var(--radius-sm); font-size: .86rem; color: #fb7185;
+      background: color-mix(in srgb, var(--peach) 12%, transparent); border: 1px solid color-mix(in srgb, var(--peach) 32%, transparent);
+      border-radius: var(--radius-sm); font-size: .86rem; color: var(--text);
       display: flex; align-items: flex-start; gap: .75rem;
     }
-    .error-card button { background: none; border: none; color: #fb7185; cursor: pointer; font-size: 1.1rem; margin-left: auto; line-height: 1; }
+    .error-card button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; margin-left: auto; line-height: 1; }
     /* ---- Leaderboard ---- */
     .lb-row {
       display: flex; align-items: center; gap: .8rem;
@@ -378,6 +405,7 @@
     .lb-info { flex: 1; overflow: hidden; }
     .lb-name { font-size: .92rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .lb-meta { font-size: .73rem; color: var(--text-muted); margin-top: .15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .streak-badge { font-size: .72rem; }
     .lb-best-win { text-align: right; flex-shrink: 0; }
     .lb-best-win span { display: block; font-size: .92rem; font-weight: 800; color: var(--accent-light); white-space: nowrap; font-variant-numeric: tabular-nums; }
     .lb-best-win small { display: block; font-size: .62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
@@ -407,7 +435,7 @@
       border-top: 1px solid var(--border);
     }
     .hist-guess-row.is-winner { background: var(--accent-soft); }
-    .hist-guess-row.is-me { background: rgba(56,189,248,0.08); }
+    .hist-guess-row.is-me { background: rgba(124,58,237,0.09); }
     .hist-guess-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hist-guess-val { font-weight: 800; font-variant-numeric: tabular-nums; }
     .hist-guess-dist { font-size: .72rem; color: var(--text-muted); }
@@ -421,17 +449,26 @@
       display: flex; gap: .5rem; margin-bottom: .85rem;
     }
     .mygames-summary .mg-stat {
-      flex: 1; background: var(--card); border: 1px solid var(--border);
+      flex: 1; background: var(--bg-card); border: 1px solid var(--border);
       border-radius: var(--radius); padding: .7rem .5rem; text-align: center;
     }
     .mygames-summary .mg-stat strong { display: block; font-size: 1.15rem; font-weight: 800; color: var(--accent-light); }
     .mygames-summary .mg-stat small { display: block; font-size: .68rem; color: var(--text-muted); margin-top: .15rem; text-transform: uppercase; letter-spacing: .03em; }
     .mg-row {
-      display: flex; align-items: center; gap: .75rem;
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: .7rem .85rem; margin-bottom: .5rem;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: .5rem; overflow: hidden;
     }
     .mg-row.is-winner { border-color: var(--accent); }
+    .mg-head {
+      display: flex; align-items: center; gap: .6rem;
+      padding: .7rem .85rem; width: 100%;
+    }
+    .mg-row.expandable .mg-head { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .mg-caret {
+      flex-shrink: 0; width: 1rem; text-align: center; font-size: .7rem;
+      color: var(--text-muted); transition: transform .2s; user-select: none;
+    }
+    .mg-row.is-open .mg-caret { transform: rotate(90deg); }
     .mg-row .mg-main { flex: 1; min-width: 0; }
     .mg-row .mg-round { font-weight: 800; font-size: .85rem; }
     .mg-row .mg-meta { font-size: .72rem; color: var(--text-muted); margin-top: .15rem; }
@@ -440,6 +477,24 @@
     .mg-outcome.win { color: var(--accent-light); }
     .mg-outcome.loss { color: var(--text-muted); }
     .mg-score { font-size: .76rem; font-weight: 800; color: #f59e0b; margin-top: .2rem; font-variant-numeric: tabular-nums; }
+    /* Expanded per-guess detail */
+    .mg-detail {
+      border-top: 1px solid var(--border); padding: .65rem .85rem .75rem;
+      background: color-mix(in srgb, var(--bg-card) 60%, var(--bg) 40%);
+    }
+    .mg-detail-secret {
+      font-size: .72rem; color: var(--text-muted); margin-bottom: .5rem;
+    }
+    .mg-detail-secret strong { color: var(--accent-light); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .mg-guess-row {
+      display: flex; align-items: baseline; gap: .5rem;
+      font-size: .78rem; padding: .2rem 0;
+    }
+    .mg-guess-row + .mg-guess-row { border-top: 1px dashed color-mix(in srgb, var(--border) 70%, transparent); }
+    .mg-guess-idx { color: var(--text-muted); font-size: .7rem; min-width: 3.4rem; }
+    .mg-guess-val { font-weight: 800; font-variant-numeric: tabular-nums; }
+    .mg-guess-dist { color: var(--text-muted); font-size: .72rem; margin-left: auto; }
+    .mg-guess-row.is-hit .mg-guess-val { color: var(--accent-light); }
     /* ---- Bottom Nav ---- */
     .bottom-nav {
       position: fixed; bottom: 0; left: 0; right: 0;
@@ -467,7 +522,7 @@
     /* ---- Modals ---- */
     .modal-overlay {
       display: none; position: fixed; inset: 0; z-index: 300;
-      background: rgba(2,6,16,0.62); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      background: rgba(3,4,12,0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
       align-items: flex-end; justify-content: center;
     }
     .modal-overlay.open { display: flex; }
@@ -475,10 +530,10 @@
       background: var(--bg-elev); border: 1px solid var(--border);
       border-radius: var(--radius) var(--radius) 0 0;
       padding: 1.5rem 1.25rem calc(2rem + var(--safe-b)); width: 100%; max-width: var(--maxw);
-      animation: slide-up .26s cubic-bezier(.2,.8,.2,1);
-      box-shadow: 0 -8px 40px rgba(0,0,0,0.4);
+      animation: slide-up .4s cubic-bezier(.22,.7,.3,1);
+      box-shadow: 0 -10px 44px rgba(60,50,110,0.18);
     }
-    @keyframes slide-up { from { transform: translateY(70px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes slide-up { from { transform: translateY(80px); opacity: 0; } to { transform: none; opacity: 1; } }
     .modal-title { font-size: 1.05rem; font-weight: 800; margin-bottom: 1.1rem; }
     .username-input-row {
       display: flex; align-items: center; gap: .5rem;
@@ -531,7 +586,7 @@
     /* ---- Reconnect bar ---- */
     .reconnect-bar {
       display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 500;
-      background: #854d0e; color: #fef9c3; text-align: center;
+      background: var(--accent); color: #fff; text-align: center;
       font-size: .8rem; padding: calc(.4rem + var(--safe-t)) .4rem .4rem; font-weight: 700;
     }
     .reconnect-bar.show { display: block; }
@@ -564,7 +619,7 @@
 </head>
 <body>
 
-<div class="reconnect-bar" id="reconnect-bar">Reconnecting…</div>
+<div class="reconnect-bar" id="reconnect-bar">Reconnecting — one moment…</div>
 
 <!-- Header -->
 <header class="header">
@@ -630,21 +685,22 @@
 
     <!-- Waiting for players -->
     <div class="waiting-notice" id="waiting-notice" style="display:none">
-      <div class="wn-icon">⏳</div>
-      <p>Waiting for more players… Round will extend when time runs out.</p>
+      <div class="wn-icon">🌿</div>
+      <p>Hanging out for a few more players — the round gently extends until enough folks join. No rush.</p>
     </div>
 
     <!-- Time's Up banner (timed rounds that expired before server closes them) -->
     <div class="timesup-banner" id="timesup-banner" style="display:none">
-      <div class="tu-icon">⏰</div>
-      <div class="tu-title">Time's Up!</div>
-      <div class="tu-sub">Round is closing… results coming soon.</div>
+      <div class="tu-icon">🌙</div>
+      <div class="tu-title">That's a wrap</div>
+      <div class="tu-sub">Round's winding down — results coming in just a moment.</div>
     </div>
 
     <!-- Guess card -->
     <div class="card guess-card" id="guess-card">
       <div class="guess-label" id="guess-label">Pick a number between 1 and 100</div>
       <div id="guess-counter" class="guess-counter" style="display:none"></div>
+      <div id="guess-encouragement" class="guess-encouragement" style="display:none"></div>
       <div id="my-guesses-list" class="my-guesses" style="display:none"></div>
       <div id="guess-input-area">
         <div class="slider-row">
@@ -657,8 +713,8 @@
       <div id="all-guesses-used-msg" class="locked-badge" style="display:none">
         <span class="locked-icon">🔒</span>
         <div class="locked-text">
-          <strong>All guesses used</strong>
-          <small>Waiting for round to end… Good luck!</small>
+          <strong>All your guesses are in 🌸</strong>
+          <small>Sit back and relax — we'll reveal the number when the round wraps up.</small>
         </div>
       </div>
     </div>
@@ -668,7 +724,7 @@
       <span class="locked-icon">🔒</span>
       <div class="locked-text">
         <strong id="locked-number">Your guess: —</strong>
-        <small>Your guess is locked in. Good luck!</small>
+        <small>Locked in — relax and good luck! 🍀</small>
       </div>
     </div>
 
@@ -689,6 +745,13 @@
 
   <!-- Leaderboard Panel -->
   <div class="panel" id="panel-leaderboard">
+    <div class="segment track-selector" id="lb-track-selector">
+      <button class="seg-btn active" id="lb-track-all" onclick="setLbTrack('all')">All</button>
+      <button class="seg-btn" id="lb-track-1h" onclick="setLbTrack('1h')">1H</button>
+      <button class="seg-btn" id="lb-track-6h" onclick="setLbTrack('6h')">6H</button>
+      <button class="seg-btn" id="lb-track-1d" onclick="setLbTrack('1d')">1D</button>
+      <button class="seg-btn" id="lb-track-1w" onclick="setLbTrack('1w')">1W</button>
+    </div>
     <div class="segment track-selector" id="lb-difficulty-selector">
       <button class="seg-btn" id="lb-easy" onclick="setLbDifficulty('easy')">Easy</button>
       <button class="seg-btn active" id="lb-medium" onclick="setLbDifficulty('medium')">Medium</button>
@@ -788,10 +851,24 @@
 <script>
 'use strict';
 
-const TX_SEND_OPTS = { timeoutMs: 180000, pollIntervalMs: 1500 };
+// Client-side soft-timeout for a guess send. Kept well under the server-side
+// /waitForTx ceiling (180s) so the UI pivots to its own chain-state
+// reconciliation (awaitGuessConfirmed) within ~20s instead of leaving the
+// player staring at a spinner for three minutes.
+const TX_SEND_OPTS = { timeoutMs: 20000, pollIntervalMs: 1500 };
+// After a send resolves without a tx (queued) or times out, poll the
+// chain-derived /__numguess/state for up to this long, checking whether the
+// guess actually landed, before deciding it's genuinely unconfirmed.
+const GUESS_RECONCILE_MS = 18000;
+const GUESS_RECONCILE_INTERVAL_MS = 1500;
 const GAME_POLL_MS = 4000;
 const FAST_POLL_MS = 1000;
 const FAST_POLL_DURATION = 30000;
+// A timed-out optimistic guess (tx may still confirm) lingers this long before
+// it's aged out of the pending buffer; any pending entry older than the hard
+// backstop is dropped regardless of status, so nothing leaks forever.
+const PENDING_TIMEOUT_TTL_MS = 90000;
+const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
 const TRACKS = ['1h', '6h', '1d', '1w'];
 
 let myAddress = null;
@@ -806,6 +883,11 @@ let lastSignInReason = '';  // human-readable reason the last wallet connect att
 let currentTab = 'game';
 let fastPollEnd = 0;
 let pollTimer = null;
+// Optimistic guesses placed this session but not yet observed on-chain. Held
+// OUTSIDE gameState (which refreshState() replaces wholesale on every poll) so
+// a just-placed guess survives state replacement and renders instantly. Each:
+// { roundId, track, guess, ts, status: 'pending' | 'confirmed' | 'timeout' }.
+let pendingGuesses = [];
 let countdownTimer = null;
 // Staging-only demo mode (activated by ?demo=1 when the server reports staging):
 // simulates the on-chain send with a fixed pending delay so the spinner →
@@ -830,6 +912,7 @@ let pickerSegment = 'medium';
 
 let selectedTrack = '1d';
 let selectedDifficulty = 'medium';
+let selectedLbTrack = 'all';
 let selectedHistTrack = '1d';
 
 let winAutoSwitchTimer = null;
@@ -845,7 +928,11 @@ function toggleTheme() {
 (function () {
   try {
     const saved = localStorage.getItem('ng:theme');
-    if (saved) document.documentElement.setAttribute('data-theme', saved);
+    // Light pastel is the default; only a stored preference overrides it, so
+    // returning users keep whatever they last chose.
+    if (saved === 'dark' || saved === 'light') {
+      document.documentElement.setAttribute('data-theme', saved);
+    }
   } catch {}
 })();
 
@@ -868,6 +955,14 @@ function setGameTrack(track) {
     document.getElementById('gs-' + t).classList.toggle('active', t === track);
   });
   if (gameState) render();
+}
+
+function setLbTrack(track) {
+  selectedLbTrack = track;
+  ['all', '1h', '6h', '1d', '1w'].forEach((t) => {
+    document.getElementById('lb-track-' + t).classList.toggle('active', t === track);
+  });
+  if (gameState) renderLeaderboard();
 }
 
 function setLbDifficulty(diff) {
@@ -983,6 +1078,32 @@ function demoRelayTimeout() {
       DEMO_HOLD_MS
     )
   );
+}
+
+// Bound the bridge's sendTransaction with our own client-side deadline. The
+// hosted bridge is supposed to honour opts.timeoutMs, but if it ever wedges
+// (its inclusion poll stalls, the parent shell stops responding, etc.) a bare
+// `await window.sendTransaction(...)` would hang the spinner FOREVER with no
+// result — exactly the reported "takes ages then shows nothing" failure. We
+// race it against a deadline a little longer than the bridge's own timeout so we
+// never preempt a send that's about to resolve, but always fall through to the
+// chain-state reconciliation path (which decides "did it actually land?") rather
+// than spinning indefinitely. The rejection is phrased as a relay timeout so
+// isRelayTimeout() routes it into the calm-recovery branch.
+function sendTransactionBounded(to, amount, memo, opts) {
+  const budgetMs = ((opts && opts.timeoutMs) || 20000) + 8000;
+  let timer;
+  const watchdog = new Promise((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('Usernode relay timed out (bridge did not respond in time)')),
+      budgetMs
+    );
+  });
+  // Swallow a late settlement from the bridge promise if the watchdog wins the
+  // race, so it can't surface as an unhandledrejection after we've moved on.
+  const send = Promise.resolve().then(() => window.sendTransaction(to, amount, memo, opts));
+  send.catch(() => {});
+  return Promise.race([send, watchdog]).finally(() => clearTimeout(timer));
 }
 
 // Activate demo mode once the server confirms we're in staging. Idempotent.
@@ -1203,37 +1324,66 @@ function tickCountdown() {
 }
 
 // ---- My guesses helpers ----
-function getMyGuesses(round) {
-  if (!round || !myAddress) return [];
-  return round.guesses.filter((g) => g.from === myAddress);
+// Pending optimistic guesses for a specific round (keyed by round id + track,
+// so a track switch or round roll while the bridge popup is open can't bleed a
+// stale entry into the wrong round).
+function getPendingForRound(round) {
+  if (!round || !myAddress || !pendingGuesses.length) return [];
+  return pendingGuesses.filter((p) => p.roundId === round.id && p.track === (round.durationTrack || selectedTrack));
 }
 
-// Optimistically insert a just-confirmed guess into the active round so it
-// renders the instant the wallet confirms, without waiting for the server
-// round-trip. The authoritative list arrives on the next refreshState(), which
-// replaces gameState wholesale — so this is purely a stop-gap for the brief
-// window before that completes. Dedupe by round.id + guess + player so a
-// background poll that already captured the tx can't double-count it, and bump
-// the local guess count (via the guesses array) so "guesses remaining" stays
-// correct on multi-guess rounds until reconciliation.
-function applyOptimisticGuess(roundId, guess) {
-  if (!myAddress || !gameState || !gameState.tracks) return;
-  const td = gameState.tracks[selectedTrack];
-  const round = td && td.currentRound;
-  // Re-read live state: the player may have switched tracks or the round may
-  // have rolled while the bridge popup was open. Only patch the exact round we
-  // sent into; otherwise rely on the single refreshState() that follows.
-  if (!round || round.id !== roundId || round.endedAt) return;
-  if (!Array.isArray(round.guesses)) round.guesses = [];
-  const alreadyShown = round.guesses.some((g) => g && g.from === myAddress && g.guess === guess);
-  if (alreadyShown) return;
-  const wasParticipant = round.guesses.some((g) => g && g.from === myAddress);
-  round.guesses.push({ from: myAddress, guess: guess });
-  // Each guess costs 1 token: bump the local pot, and participants only on the
-  // player's first entry this round. refreshState() overwrites both moments later.
-  if (typeof round.pot === 'number') round.pot += 1;
-  if (!wasParticipant && typeof round.participants === 'number') round.participants += 1;
-  render();
+// "My guesses this round" = the player's authoritative on-chain guesses, plus
+// any optimistic pending guesses not yet reflected on-chain. Deduped by guess
+// value so a background poll that already captured the tx can't double-count.
+// Pending entries carry `pending: true` (until their status flips to
+// 'confirmed') so the renderer can dim them; counts derived from this list
+// (counter / remaining / max-guesses enforcement) tick the instant a guess is
+// placed and stay correct through reconciliation.
+function getMyGuesses(round) {
+  if (!round || !myAddress) return [];
+  const confirmed = (round.guesses || []).filter((g) => g.from === myAddress);
+  const pend = getPendingForRound(round)
+    .filter((p) => !confirmed.some((g) => g.guess === p.guess))
+    .map((p) => ({ from: myAddress, guess: p.guess, pending: p.status !== 'confirmed' }));
+  return confirmed.concat(pend);
+}
+
+// Optimistic pot / participant bump for the round bar, derived from pending
+// guesses that haven't yet landed on-chain. The server derives both pot and the
+// "players" count from the guess list (pot = Σ amounts, participants =
+// guesses.length), so each pending guess adds 1 to each — matching what the
+// authoritative state will report once the tx lands, so there's no jump on
+// reconcile.
+function optimisticRoundDelta(round) {
+  const pend = getPendingForRound(round)
+    .filter((p) => !((round.guesses || []).some((g) => g.from === myAddress && g.guess === p.guess)));
+  return { pot: pend.length, participants: pend.length };
+}
+
+function removePendingGuess(entry) {
+  const idx = pendingGuesses.indexOf(entry);
+  if (idx >= 0) pendingGuesses.splice(idx, 1);
+}
+
+// Drop pending entries the chain has caught up to (or that no longer apply),
+// so an optimistic row seamlessly becomes a normal confirmed row. Runs on every
+// render once gameState exists. In DEMO there is no chain to reconcile against,
+// so entries persist (and are shown as confirmed) until the round rolls.
+function reconcilePendingGuesses() {
+  if (!pendingGuesses.length || !gameState || !gameState.tracks) return;
+  const now = Date.now();
+  pendingGuesses = pendingGuesses.filter((p) => {
+    if (now - p.ts > PENDING_MAX_AGE_MS) return false;
+    if (p.status === 'timeout' && now - p.ts > PENDING_TIMEOUT_TTL_MS) return false;
+    const td = gameState.tracks[p.track];
+    const round = td && td.currentRound;
+    // Round rolled, ended, or vanished → the optimistic guess no longer applies.
+    if (!round || round.id !== p.roundId || round.endedAt) return false;
+    if (DEMO) return true; // never reconciled from chain in demo mode
+    // Authoritative guess present on-chain → reconciled; stop showing the dup.
+    const landed = (round.guesses || []).some((g) => g.from === myAddress && g.guess === p.guess);
+    return !landed;
+  });
 }
 
 function getMyBestGuess(round, myGuesses) {
@@ -1245,13 +1395,119 @@ function getMyBestGuess(round, myGuesses) {
   }, null);
 }
 
+// ---- Guess confirmation / reconciliation ----
+// True once a guess with this value from the signed-in player is present in the
+// chain-derived state for the given round. Scans every track (the player may
+// have switched tracks while the bridge popup was open) and keys on
+// from === myAddress so another player's identical guess can't false-confirm.
+function guessLanded(roundId, value) {
+  if (!myAddress || !gameState || !gameState.tracks) return false;
+  for (const t of TRACKS) {
+    const td = gameState.tracks[t];
+    const round = td && td.currentRound;
+    if (round && round.id === roundId && Array.isArray(round.guesses)) {
+      if (round.guesses.some((g) => g && g.from === myAddress && g.guess === value)) return true;
+    }
+  }
+  return false;
+}
+
+// Bounded reconciliation: treat /__numguess/state as the source of truth for
+// "did my guess land?", decoupled from whether the bridge promise resolved.
+// Polls refreshState() until the guess appears or `deadline` passes. Never
+// resubmits — it only observes. This is environment-agnostic: in staging the
+// guess is landed server-side via postStagingGuess() before this runs, so it
+// shows up in /__numguess/state exactly like a real on-chain guess in prod.
+async function awaitGuessConfirmed(roundId, value, deadline) {
+  if (guessLanded(roundId, value)) return true;
+  while (Date.now() < deadline) {
+    try { await refreshState(); } catch {}
+    if (guessLanded(roundId, value)) return true;
+    await new Promise((r) => setTimeout(r, GUESS_RECONCILE_INTERVAL_MS));
+  }
+  return guessLanded(roundId, value);
+}
+
+// DEMO-only: guesses placed this session. Real chain state never contains them,
+// so the poll loop's refreshState() would wipe the optimistic patch — we re-apply
+// these after each demo refresh so the confirmed state stays visible (and the
+// recovery flow is screenshot-/check-testable end to end). No-op in production.
+let demoGuesses = [];
+
+// Flip the guess button into its confirmed flash, drop the guess in optimistically
+// (idempotent) and clear any soft warning / reconnect bar.
+function markGuessConfirmed(btn, roundId, value) {
+  applyOptimisticGuess(roundId, value);
+  if (DEMO && !demoGuesses.some((d) => d.roundId === roundId && d.value === value)) {
+    demoGuesses.push({ roundId: roundId, value: value });
+  }
+  clearErrors();
+  document.getElementById('reconnect-bar').classList.remove('show');
+  setBtnState(btn, 'confirmed', 'Guess locked in');
+}
+
+// Re-apply any demo guesses onto the freshly-fetched gameState (DEMO only).
+function reapplyDemoGuesses() {
+  if (!DEMO || !demoGuesses.length) return;
+  for (const d of demoGuesses) applyOptimisticGuess(d.roundId, d.value);
+}
+
+// The outcome is genuinely unknown after reconciliation: reassure the player,
+// keep the fast-poll recovery burst running so a late-confirmed guess still
+// surfaces on its own, and reset the button. Never resubmit (double-spend risk).
+function guessSoftTimeout(btn) {
+  setSending(false);
+  setBtnState(btn, 'idle', 'Place Guess — 1 token');
+  showError('Hang tight — this is taking a moment to confirm. It may still go through; check back shortly. 🌿');
+  fastPollEnd = Date.now() + FAST_POLL_DURATION;
+  document.getElementById('reconnect-bar').classList.add('show');
+  if (!DEMO) { refreshState().catch(() => {}); scheduleNextPoll(); }
+}
+
+// Land a guess in the staging server's in-memory mock ledger so it confirms via
+// the normal /__numguess/state reconciliation and persists across reloads. The
+// endpoint is staging-only (404 in production) — this is only ever called from
+// the staging/demo branch of placeGuess. Forward ?demo=1 so the server
+// attributes the guess to the demo wallet, matching this client's demo
+// myAddress. Soft-failing: a non-ok response just means reconciliation will time
+// out into the normal recovery path, exactly as before.
+async function postStagingGuess(roundId, guess) {
+  const demo = DEMO ? '?demo=1' : '';
+  try {
+    const res = await fetch('/__numguess/staging/guess' + demo, {
+      method: 'POST',
+      signal: AbortSignal.timeout(10000),
+      headers: {
+        'content-type': 'application/json',
+        'x-usernode-token': window._ngToken || '',
+      },
+      // Send our own wallet address so the server attributes the guess to
+      // EXACTLY the address guessLanded() matches on (myAddress). Without this
+      // the server would use the JWT pubkey, which can differ from the bridge
+      // wallet address and silently break the "is this mine?" confirmation.
+      body: JSON.stringify({ round: roundId, guess: guess, from: myAddress }),
+    });
+    if (!res.ok) {
+      console.warn('[postStagingGuess] server returned', res.status);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[postStagingGuess] failed:', e && e.message ? e.message : e);
+    return false;
+  }
+}
+
 // ---- Guess action ----
 async function placeGuess() {
   // Never silently swallow a tap. If a previous send is genuinely still in
   // flight, say so; if it looks wedged (promise never settled past the tx
   // timeout), recover instead of disabling the button forever.
   if (sending) {
-    if (Date.now() - sendStartedAt > TX_SEND_OPTS.timeoutMs + 5000) {
+    // A send now spans the bridge wait AND the post-send chain reconciliation, so
+    // only treat it as wedged once both windows have elapsed — otherwise a re-tap
+    // during reconciliation could double-submit (and double-spend).
+    if (Date.now() - sendStartedAt > TX_SEND_OPTS.timeoutMs + GUESS_RECONCILE_MS + 5000) {
       console.warn('[placeGuess] previous send appears stuck — resetting send state');
       setSending(false);
     } else {
@@ -1295,13 +1551,46 @@ async function placeGuess() {
   // Keep `sending` true through the confirmed flash so the poll loop's
   // updateGuessCard can't re-enable the button mid-lifecycle.
   setBtnState(guessBtn, 'pending', 'Confirming…');
+
+  // Optimistically register the guess the instant the player commits, BEFORE the
+  // bridge popup resolves, so it shows immediately as a dimmed "Placing…" row
+  // (and ticks the counter / pot / players). The send guard above prevents a
+  // double-push for the same in-flight tap; still dedupe by round + value so a
+  // recovered-from-stuck retry of the same number can't stack two rows.
+  let pendingEntry = pendingGuesses.find((p) =>
+    p.roundId === round.id && p.track === selectedTrack && p.guess === guess && p.status !== 'timeout');
+  if (!pendingEntry) {
+    pendingEntry = { roundId: round.id, track: selectedTrack, guess, ts: Date.now(), status: 'pending' };
+    pendingGuesses.push(pendingEntry);
+  } else {
+    pendingEntry.ts = Date.now();
+    pendingEntry.status = 'pending';
+  }
+  render();
+
   console.log('[placeGuess] opening bridge approval for guess', { round: round.id, guess, to: appPubkey });
   try {
-    if (DEMO) {
-      if (demoForceTimeout) await demoRelayTimeout();
-      await demoHold();
+    // `confirmed` gates the success flash. It's true only when we KNOW the guess
+    // landed — either the bridge handed back a tx, or chain-state reconciliation
+    // found it. A bare "promise resolved" is not enough (the bridge has a queued
+    // path that resolves with no tx).
+    let confirmed = false;
+    if (DEMO || (gameState && gameState.staging)) {
+      // Staging preview: no funded wallet / server signer exists, so a real
+      // on-chain send can't complete. Instead land the guess in the staging
+      // server's in-memory mock ledger (staging-only endpoint) so it confirms
+      // via the normal state reconciliation AND persists across reloads. DEMO
+      // adds the simulated send delay so the spinner lifecycle stays observable;
+      // ?demoTimeout=1 still throws before the guess is posted, so it falls
+      // through to the calm soft-timeout recovery path below.
+      if (DEMO && demoForceTimeout) await demoRelayTimeout();
+      if (DEMO) await demoHold();
+      await postStagingGuess(round.id, guess);
+      // Snappy local render before the first authoritative refresh picks it up.
+      applyOptimisticGuess(round.id, guess);
+      confirmed = await awaitGuessConfirmed(round.id, guess, Date.now() + GUESS_RECONCILE_MS);
     } else {
-      const result = await window.sendTransaction(appPubkey, 1, memoStr, {
+      const result = await sendTransactionBounded(appPubkey, 1, memoStr, {
         ...TX_SEND_OPTS,
         serverCacheUrl: '/__usernode/cache/' + appPubkey,
         confirmTitle: 'Lock in your guess',
@@ -1313,42 +1602,64 @@ async function placeGuess() {
       // back the confirmed transaction. Read it defensively — the resolved shape
       // is owned by the bridge and may carry no tx on its "queued" path. When we
       // do have a confirmation, optimistically drop the guess into the active
-      // round so it shows instantly instead of waiting for the next poll to
-      // rediscover what we already know landed.
+      // round so it shows instantly.
       const confirmedTx = (result && typeof result === 'object' && result.tx &&
         typeof result.tx === 'object') ? result.tx : null;
-      if (confirmedTx) applyOptimisticGuess(round.id, guess);
+      if (confirmedTx) {
+        applyOptimisticGuess(round.id, guess);
+        confirmed = true;
+      } else {
+        // Queued path: the bridge resolved but didn't vouch for inclusion. Don't
+        // flash a premature confirmation — reconcile against chain-derived state
+        // and only confirm once the guess actually appears.
+        confirmed = await awaitGuessConfirmed(round.id, guess, Date.now() + GUESS_RECONCILE_MS);
+      }
     }
-    // Tx is included — show the confirmed flash, then let normal render take over.
-    setBtnState(guessBtn, 'confirmed', 'Guess locked in');
-    // Exactly one authoritative refresh to reconcile pot / participants /
-    // leaderboard. No 30s fast-poll burst: the bridge confirmation already
-    // told us the tx is in (and the same cache feeds /__numguess/state), so a
-    // single read is enough. The round-end fast-poll burst stays elsewhere.
-    if (!DEMO) await refreshState();
-    setTimeout(() => {
-      setSending(false);
-      setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
-      if (gameState) render();
-    }, 900);
+    if (confirmed) {
+      // Tx is included — show the confirmed flash, then let normal render take over.
+      markGuessConfirmed(guessBtn, round.id, guess);
+      // One authoritative refresh to reconcile pot / participants / leaderboard.
+      if (!DEMO) await refreshState();
+      setTimeout(() => {
+        setSending(false);
+        setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
+        if (gameState) render();
+      }, 900);
+    } else {
+      // Landed-unknown even after reconciliation — keep the cautious message.
+      guessSoftTimeout(guessBtn);
+    }
   } catch (e) {
-    setSending(false);
-    setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
     const msg = e && e.message ? e.message : String(e);
     const low = msg.toLowerCase();
     if (isRelayTimeout(msg)) {
-      // Soft timeout: the guess may well have landed. Don't resubmit (that would
-      // risk a double token spend) — instead reassure the player and kick off the
-      // existing fast-poll burst so a confirmed guess appears on its own.
-      showError('Taking longer than expected to confirm — it may still go through. Check back in a moment.');
-      fastPollEnd = Date.now() + FAST_POLL_DURATION;
-      document.getElementById('reconnect-bar').classList.add('show');
-      if (!DEMO) { refreshState().catch(() => {}); scheduleNextPoll(); }
+      // Soft timeout: the guess may well have landed but the confirmation poll
+      // never came back. Before showing a scary message, actively reconcile
+      // against chain-derived state — the common case is that it DID land.
+      // Keep `sending` true through reconciliation so a re-tap can't double-spend.
+      const ok = await awaitGuessConfirmed(round.id, guess, Date.now() + GUESS_RECONCILE_MS);
+      if (ok) {
+        markGuessConfirmed(guessBtn, round.id, guess);
+        if (!DEMO) await refreshState();
+        setTimeout(() => {
+          setSending(false);
+          setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
+          if (gameState) render();
+        }, 900);
+      } else {
+        // Genuinely unknown: reassure, keep recovery polling, never resubmit.
+        guessSoftTimeout(guessBtn);
+      }
     } else if (low.includes('declin') || low.includes('reject') || low.includes('cancel') || low.includes('denied')) {
-      showError('Transaction declined — your guess was not placed.');
+      setSending(false);
+      setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
+      showError('No problem — your guess wasn\'t placed. Try again whenever you\'re ready. 🍀');
     } else {
-      showError('Transaction failed: ' + msg);
+      setSending(false);
+      setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
+      showError('Hmm, that guess didn\'t go through. Give it another try in a moment.');
     }
+    if (gameState) render();
   }
 }
 
@@ -1446,6 +1757,7 @@ async function saveMode() {
   try {
     const resp = await fetch('/__numguess/admin/set-mode', {
       method: 'POST',
+      signal: AbortSignal.timeout(10000),
       headers: {
         'content-type': 'application/json',
         'x-usernode-token': window._ngToken || '',
@@ -1478,7 +1790,7 @@ async function loadAccount() {
     // re-calls loadAccount). So this is safe — no demo data leaks before staging
     // is confirmed by the server.
     const demo = DEMO ? '?demo=1' : '';
-    const res = await fetch('/api/me' + demo, { cache: 'no-store', headers });
+    const res = await fetch('/api/me' + demo, { cache: 'no-store', headers, signal: AbortSignal.timeout(10000) });
     if (!res.ok) return; // 401 / error → leave badge hidden
     const data = await res.json();
     if (!data || !data.username) return;
@@ -1500,7 +1812,9 @@ async function loadAccount() {
 async function refreshState() {
   try {
     const headers = window._ngToken ? { 'x-usernode-token': window._ngToken } : {};
-    const res = await fetch('/__numguess/state', { cache: 'no-store', headers });
+    // Bound the fetch: awaitGuessConfirmed() awaits refreshState() in a loop, so a
+    // single hung state request would otherwise stall the whole confirmation.
+    const res = await fetch('/__numguess/state', { cache: 'no-store', headers, signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
 
@@ -1532,6 +1846,9 @@ async function refreshState() {
     }
 
     maybeActivateDemo();
+    // Keep demo guesses visible across polls — chain-derived demo state never
+    // carries them, so without this the poll loop would wipe a confirmed guess.
+    reapplyDemoGuesses();
     render();
     document.getElementById('reconnect-bar').classList.remove('show');
   } catch (e) {
@@ -1542,15 +1859,23 @@ async function refreshState() {
 
 function render() {
   if (!gameState || !gameState.tracks) return;
+  // Drop optimistic guesses the chain has caught up to (or that no longer
+  // apply) before deriving anything from them.
+  reconcilePendingGuesses();
   const td = gameState.tracks[selectedTrack] || {};
   const round = td.currentRound || null;
 
   // Round bar
   if (round) {
     document.getElementById('round-badge').textContent = 'Round ' + round.id;
+    // Bump pot / players for any optimistic guesses not yet on-chain, so the
+    // bar moves the instant a guess is placed.
+    const delta = optimisticRoundDelta(round);
+    const partDisp = round.participants + delta.participants;
+    const potDisp = round.pot + delta.pot;
     document.getElementById('players-info').textContent =
-      round.participants + ' player' + (round.participants !== 1 ? 's' : '') +
-      ' · ' + round.pot + ' token' + (round.pot !== 1 ? 's' : '');
+      partDisp + ' player' + (partDisp !== 1 ? 's' : '') +
+      ' · ' + potDisp + ' token' + (potDisp !== 1 ? 's' : '');
 
     const durationBadge = document.getElementById('duration-badge');
     const durMs = round.activeDurationMs;
@@ -1628,6 +1953,7 @@ function render() {
                 document.getElementById('panel-' + tab).classList.toggle('active', tab === 'leaderboard');
                 document.getElementById('nav-' + tab).classList.toggle('active', tab === 'leaderboard');
               });
+              setLbTrack(t);
               setLbDifficulty(wonDifficulty);
               renderLeaderboard();
               setTimeout(() => {
@@ -1714,23 +2040,47 @@ function updateGuessCard(round, myGuesses, maxGuesses, allGuessesUsed) {
   const allUsedMsg = document.getElementById('all-guesses-used-msg');
   const guessBtn = document.getElementById('guess-btn');
 
+  const encouragement = document.getElementById('guess-encouragement');
   if (maxGuesses > 1) {
     counter.style.display = '';
     const used = myGuesses.length;
     const remaining = maxGuesses - used;
     counter.textContent = used + ' of ' + maxGuesses + ' guesses used' +
       (remaining > 0 ? ' · ' + remaining + ' remaining' : '');
+
+    // Morale-only encouragement keyed purely to guesses remaining. It never
+    // consults the secret or proximity — the number is only known once the
+    // round ends — so gameplay is unchanged.
+    if (encouragement) {
+      let msg = '';
+      if (remaining >= 1) {
+        if (used === 0) {
+          msg = 'Take your time — pick a number that feels right 🌿';
+        } else if (remaining === 1) {
+          msg = 'Last guess — make it count, no pressure! 🍀';
+        } else if (remaining <= 3) {
+          msg = 'A few guesses left — trust your gut 🌸';
+        } else {
+          msg = 'Plenty of guesses left — no rush at all 🌿';
+        }
+      }
+      if (msg) { encouragement.textContent = msg; encouragement.style.display = ''; }
+      else { encouragement.style.display = 'none'; }
+    }
   } else {
     counter.style.display = 'none';
+    if (encouragement) encouragement.style.display = 'none';
   }
 
   if (myGuesses.length > 0) {
     myGuessesList.style.display = '';
     myGuessesList.innerHTML = '<div class="my-guesses-label">My guesses this round</div>' +
       myGuesses.map((g, i) =>
-        '<div class="my-guess-row">' +
+        '<div class="my-guess-row' + (g.pending ? ' is-pending' : '') + '">' +
+        (g.pending ? '<span class="my-guess-pending-dot"></span>' : '') +
         '<span class="my-guess-val">' + g.guess + '</span>' +
-        '<span class="my-guess-tag">Guess ' + (i + 1) + '</span>' +
+        '<span class="my-guess-tag' + (g.pending ? ' is-pending' : '') + '">' +
+        (g.pending ? 'Placing…' : 'Guess ' + (i + 1)) + '</span>' +
         '</div>'
       ).join('');
   } else {
@@ -1768,7 +2118,7 @@ function renderResult(round, myGuesses) {
 
   const headingEl = document.getElementById('result-heading');
   if (isTimed && noWinner) {
-    headingEl.textContent = '⏰ TIME\'S UP';
+    headingEl.textContent = '🌙 THAT\'S A WRAP';
     headingEl.style.display = '';
   } else {
     headingEl.style.display = 'none';
@@ -1776,7 +2126,7 @@ function renderResult(round, myGuesses) {
 
   const winnerName = round.winner ? getName(round.winner) : '—';
   document.getElementById('result-winner').textContent =
-    round.winner ? ('🏆 ' + escapeHtml(winnerName) + ' guessed ' + round.winnerGuess) : 'No winner this round';
+    round.winner ? ('🏆 ' + escapeHtml(winnerName) + ' guessed ' + round.winnerGuess) : 'No winner this time — better luck next round!';
 
   const bestGuess = getMyBestGuess(round, myGuesses);
   let earnedScore = 0;
@@ -1785,17 +2135,22 @@ function renderResult(round, myGuesses) {
     const dist = Math.abs(bestGuess.guess - secret);
     bestDist = dist;
     const isBullseye = dist === 0;
+    const iWon = round.winner && round.winner === myAddress;
     document.getElementById('bullseye-badge').style.display = isBullseye ? '' : 'none';
-    document.getElementById('result-mine').textContent =
-      isBullseye ? 'You nailed it!' :
-      (myGuesses.length > 1
-        ? 'Your best guess was ' + bestGuess.guess + ' — ' + dist + ' away'
-        : 'Your guess was ' + bestGuess.guess + ' — ' + dist + ' away');
-    const iWon = round.winner === myAddress;
+    let mine;
+    if (isBullseye) {
+      mine = 'You nailed it! 🎯';
+    } else if (iWon) {
+      mine = (myGuesses.length > 1 ? 'Your best guess was ' : 'Your guess was ') + bestGuess.guess + ' — just ' + dist + ' away. Closest of all! 🏆';
+    } else {
+      const lead = dist <= 3 ? 'So close! ' : dist <= 10 ? 'Nice try! ' : 'Good effort! ';
+      mine = lead + (myGuesses.length > 1 ? 'Your best guess was ' : 'Your guess was ') + bestGuess.guess + ', just ' + dist + ' away. Jump into the next round!';
+    }
+    document.getElementById('result-mine').textContent = mine;
     earnedScore = computeRoundScore(round.difficulty || 'medium', myGuesses.length, iWon, iWon ? dist : null);
   } else {
     document.getElementById('bullseye-badge').style.display = 'none';
-    document.getElementById('result-mine').textContent = myGuesses.length > 0 ? '' : "You didn't guess this round";
+    document.getElementById('result-mine').textContent = myGuesses.length > 0 ? '' : 'You sat this one out — hop into the next round!';
   }
 
   const scoreEl = document.getElementById('result-score');
@@ -1817,7 +2172,7 @@ function renderResult(round, myGuesses) {
   const td = gameState.tracks && gameState.tracks[selectedTrack];
   const hasNext = td && td.currentRound && !td.currentRound.endedAt;
   document.getElementById('next-round-label').textContent =
-    hasNext ? '' : 'Next round starting soon…';
+    hasNext ? '' : 'A fresh round is on its way…';
 }
 
 function defName(addr) {
@@ -1846,8 +2201,11 @@ function hasCustomName(addr) {
 
 function renderLeaderboard() {
   if (!gameState || !gameState.difficulties) return;
-  const td = gameState.difficulties[selectedDifficulty] || {};
-  const stats = td.playerStats || {};
+  const diffData = gameState.difficulties[selectedDifficulty] || {};
+  const useTrack = selectedLbTrack && selectedLbTrack !== 'all';
+  const trackData = useTrack ? ((diffData.byTrack || {})[selectedLbTrack] || {}) : null;
+  const stats = useTrack ? (trackData.playerStats || {}) : (diffData.playerStats || {});
+  const streaks = useTrack ? (trackData.streaks || {}) : {};
   const entries = Object.entries(stats)
     .map(([pubkey, s]) => ({ pubkey, ...s }))
     .filter((e) => e.bestWinGuessCount != null)
@@ -1876,11 +2234,13 @@ function renderLeaderboard() {
     const bestWin = e.bestWinGuessCount === 1 ? '1 guess' : e.bestWinGuessCount + ' guesses';
     const best = e.bestDist != null ? e.bestDist + ' off' : '—';
     const totalScore = e.totalScore || 0;
+    const streak = streaks[e.pubkey] && streaks[e.pubkey].bestStreak > 0 ? streaks[e.pubkey].bestStreak : 0;
+    const streakBadge = streak > 0 ? ' <span class="streak-badge">🔥' + streak + '</span>' : '';
     return '<div class="lb-row' + (isMe ? ' is-me' : '') + '">' +
       '<div class="lb-rank ' + rankClass + '">' + rank + '</div>' +
       '<div class="lb-info">' +
         '<div class="lb-name">' + escapeHtml(name) + (isMe ? ' <strong>(you)</strong>' : '') + '</div>' +
-        '<div class="lb-meta">' + e.won + ' win' + (e.won !== 1 ? 's' : '') + ' · best: ' + bestWin + ' · ' + best + '</div>' +
+        '<div class="lb-meta">' + e.won + ' win' + (e.won !== 1 ? 's' : '') + ' · ' + e.tokensWon + ' tokens · best: ' + bestWin + ' · ' + best + streakBadge + '</div>' +
       '</div>' +
       '<div class="lb-best-win"><span class="lb-score">' + totalScore.toLocaleString() + '</span><span class="lb-score-label">total pts</span></div>' +
       '</div>';
@@ -1938,6 +2298,16 @@ function toggleHist(id) {
 
 // ---- My Games (personal history) ----
 let myGamesData = null;
+// round_ids whose per-guess detail is currently expanded. Kept across the poll
+// loop's re-renders so an open row stays open while the tab is refreshed.
+const myGamesExpanded = new Set();
+
+function toggleMyGameRow(roundId) {
+  const id = Number(roundId);
+  if (myGamesExpanded.has(id)) myGamesExpanded.delete(id);
+  else myGamesExpanded.add(id);
+  renderMyGames();
+}
 
 async function refreshMyGames() {
   const list = document.getElementById('mygames-list');
@@ -1955,7 +2325,7 @@ async function refreshMyGames() {
     const headers = window._ngToken ? { 'x-usernode-token': window._ngToken } : {};
     // Forward ?demo=1 only when DEMO is confirmed active (server already verified staging).
     const demo = DEMO ? '?demo=1' : '';
-    const res = await fetch('/api/my-history' + demo, { cache: 'no-store', headers });
+    const res = await fetch('/api/my-history' + demo, { cache: 'no-store', headers, signal: AbortSignal.timeout(12000) });
     if (res.status === 401) {
       if (summary) summary.style.display = 'none';
       list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔒</div><p>Sign in to see your game history.</p></div>';
@@ -2020,12 +2390,46 @@ function renderMyGames() {
     const rowScore = r.score || 0;
     const scoreHtml = rowScore > 0 ? '<div class="mg-score">+' + rowScore.toLocaleString() + ' pts</div>' : '';
 
-    return '<div class="mg-row' + (r.won ? ' is-winner' : '') + '">' +
-      '<div class="mg-main">' +
-        '<div class="mg-round">Round ' + r.round_id + '</div>' +
-        '<div class="mg-meta">' + escapeHtml(tags) + (tags ? ' · ' : '') + guesses + (date ? ' · ' + date : '') + '</div>' +
+    // Per-guess detail is opt-in: only rows that actually have guesses are
+    // expandable. Older rows / DB-disabled edge cases collapse the caret to a
+    // no-op and just show the summary line.
+    const myGuesses = Array.isArray(r.guesses) ? r.guesses : [];
+    const expandable = myGuesses.length > 0;
+    const open = expandable && myGamesExpanded.has(Number(r.round_id));
+    const caret = expandable ? '<span class="mg-caret">▶</span>' : '';
+    const onclick = expandable ? ' onclick="toggleMyGameRow(' + r.round_id + ')"' : '';
+
+    let detailHtml = '';
+    if (open) {
+      const secretLine = (r.secret != null)
+        ? '<div class="mg-detail-secret">Secret number: <strong>' + r.secret + '</strong></div>'
+        : '';
+      const guessRows = myGuesses.map((g, i) => {
+        const idx = g.guess_index != null ? g.guess_index : (i + 1);
+        const hit = g.distance === 0;
+        const distPart = g.distance != null
+          ? (hit ? '🎯' : g.distance + ' away')
+          : '';
+        return '<div class="mg-guess-row' + (hit ? ' is-hit' : '') + '">' +
+          '<span class="mg-guess-idx">Guess ' + idx + '</span>' +
+          '<span class="mg-guess-val">' + g.guess + '</span>' +
+          (distPart ? '<span class="mg-guess-dist">' + distPart + '</span>' : '') +
+        '</div>';
+      }).join('');
+      detailHtml = '<div class="mg-detail">' + secretLine + guessRows + '</div>';
+    }
+
+    return '<div class="mg-row' + (r.won ? ' is-winner' : '') +
+        (expandable ? ' expandable' : '') + (open ? ' is-open' : '') + '">' +
+      '<div class="mg-head"' + onclick + '>' +
+        caret +
+        '<div class="mg-main">' +
+          '<div class="mg-round">Round ' + r.round_id + '</div>' +
+          '<div class="mg-meta">' + escapeHtml(tags) + (tags ? ' · ' : '') + guesses + (date ? ' · ' + date : '') + '</div>' +
+        '</div>' +
+        '<div class="mg-right">' + outcomeHtml + scoreHtml + '</div>' +
       '</div>' +
-      '<div class="mg-right">' + outcomeHtml + scoreHtml + '</div>' +
+      detailHtml +
     '</div>';
   }).join('');
 }
@@ -2060,6 +2464,11 @@ async function init() {
   // confirms USERNODE_ENV=staging (see maybeActivateDemo / refreshState).
   wantDemo = params.get('demo') === '1';
   demoForceTimeout = params.get('demoTimeout') === '1';
+  // Staging/demo-only: ?demoAutoGuess=1 auto-places one guess shortly after load
+  // so the submit→confirm flow (and the ?demoTimeout=1 recovery path) runs during
+  // the headless proposal checks, which navigate but never click. No-op unless
+  // demo mode actually activates (staging) and an active round is present.
+  const wantDemoAutoGuess = params.get('demoAutoGuess') === '1';
 
   try {
     // No client-side chain bootstrap needed: the hosted bridge discovers the
@@ -2088,6 +2497,21 @@ async function init() {
 
   scheduleNextPoll();
   countdownTimer = setInterval(tickCountdown, 1000);
+
+  if (wantDemoAutoGuess) {
+    // Poll until demo mode + wallet + an active round are ready, then fire one
+    // guess. demoForceTimeout (if also set) routes through the relay-timeout +
+    // reconciliation recovery, which should still end at "locked in".
+    let tries = 0;
+    const tick = () => {
+      if (DEMO && loggedIn && getActiveRound() && !getActiveRound().endedAt) {
+        placeGuess();
+        return;
+      }
+      if (++tries < 40) setTimeout(tick, 250);
+    };
+    setTimeout(tick, 300);
+  }
 }
 
 init();

@@ -45,6 +45,11 @@
       "expectSelector": "#guess-btn"
     },
     {
+      "name": "My-guesses list container present for optimistic pending rows",
+      "path": "/",
+      "expectSelector": "#my-guesses-list"
+    },
+    {
       "name": "Leaderboard tab renders",
       "path": "/",
       "expectSelector": ".bottom-nav"
@@ -145,6 +150,11 @@
       "expectText": "outcome"
     },
     {
+      "name": "Personal history embeds each player's individual guesses",
+      "path": "/api/my-history?demo=1",
+      "expectText": "guess_index"
+    },
+    {
       "name": "Account identity endpoint returns the signed-in username",
       "path": "/api/me?demo=1",
       "expectText": "alice_s"
@@ -175,6 +185,16 @@
       "expectSelector": "#guess-btn"
     },
     {
+      "name": "Relay-timeout recovery still confirms the guess (locked in)",
+      "path": "/?demo=1&demoTimeout=1&demoAutoGuess=1",
+      "expectText": "Locked in"
+    },
+    {
+      "name": "Demo auto-guess lands via the staging mock ledger without console errors",
+      "path": "/?demo=1&demoAutoGuess=1",
+      "expectSelector": "#guess-btn"
+    },
+    {
       "name": "Leaderboard renders with only named Usernode players",
       "path": "/?demo=1",
       "expectSelector": "#leaderboard-list"
@@ -183,6 +203,16 @@
       "name": "Usernames directory still serves a named seeded player",
       "path": "/__usernames/state",
       "expectText": "eve_s"
+    },
+    {
+      "name": "Leaderboard track selector renders",
+      "path": "/",
+      "expectSelector": "#lb-track-selector"
+    },
+    {
+      "name": "State endpoint includes byTrack leaderboard data",
+      "path": "/__numguess/state",
+      "expectText": "byTrack"
     }
   ]
 }
