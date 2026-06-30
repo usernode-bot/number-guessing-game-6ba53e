@@ -120,7 +120,9 @@ function createGame(opts) {
     // Multi-guess support: count existing guesses from this player
     const playerGuessCount = round.guesses.filter((g) => g.from === tx.from).length;
     if (playerGuessCount >= round.maxGuessesPerPlayer) return;
-    round.guesses.push({ from: tx.from, amount: tx.amount, guess, ts: tx.ts });
+    // Carry the on-chain tx id onto the guess so downstream consumers (the
+    // ledger ingestion hook, per-user history) can reference the chain receipt.
+    round.guesses.push({ from: tx.from, amount: tx.amount, guess, ts: tx.ts, id: tx.id });
     round.rawGuessCounts[tx.from] = (round.rawGuessCounts[tx.from] || 0) + 1;
   }
 

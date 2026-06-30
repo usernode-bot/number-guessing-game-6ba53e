@@ -155,6 +155,16 @@
       "expectText": "guess_index"
     },
     {
+      "name": "Personal history carries an on-chain tx reference per guess",
+      "path": "/api/my-history?demo=1",
+      "expectText": "tx_id"
+    },
+    {
+      "name": "State endpoint exposes the chain id for explorer links",
+      "path": "/__numguess/state",
+      "expectText": "chainId"
+    },
+    {
       "name": "Account identity endpoint returns the signed-in username",
       "path": "/api/me?demo=1",
       "expectText": "alice_s"

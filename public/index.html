@@ -481,6 +481,12 @@
     .mg-guess-idx { color: var(--text-muted); font-size: .7rem; min-width: 3.4rem; }
     .mg-guess-val { font-weight: 800; font-variant-numeric: tabular-nums; }
     .mg-guess-dist { color: var(--text-muted); font-size: .72rem; margin-left: auto; }
+    .mg-guess-tx {
+      margin-left: auto; font-size: .68rem; color: var(--text-muted);
+      text-decoration: none; white-space: nowrap; font-variant-numeric: tabular-nums;
+      border-bottom: 1px dotted color-mix(in srgb, var(--text-muted) 60%, transparent);
+    }
+    .mg-guess-tx:hover { color: var(--accent-light); }
     .mg-guess-row.is-hit .mg-guess-val { color: var(--accent-light); }
     /* ---- Bottom Nav ---- */
     .bottom-nav {
@@ -851,6 +857,9 @@ const TRACKS = ['1h', '6h', '1d', '1w'];
 let myAddress = null;
 let myPubkey = null;
 let appPubkey = null;
+// Live chain id from /__numguess/state, used to build "View on chain" explorer
+// links for My Games guess rows. Falls back to the testnet chain if absent.
+let explorerChainId = null;
 let myUsername = null;
 let loggedIn = false;
 let gameState = null;
@@ -1791,6 +1800,7 @@ async function refreshState() {
       window.usernode = window.usernode || {};
       window.usernode.serverCacheUrl = '/__usernode/cache/' + appPubkey;
     }
+    if (data.chainId) explorerChainId = data.chainId;
 
     if (data.loading) return;
 
@@ -2240,6 +2250,21 @@ function toggleMyGameRow(roundId) {
   renderMyGames();
 }
 
+// "View on chain" reference for a guess row. Builds a link through the public
+// /explorer-api proxy to the guess's on-chain transaction. Returns '' when the
+// guess carries no tx reference (older rows / DB-disabled edge cases) so the row
+// simply omits the link rather than rendering a dead one.
+function explorerTxLink(txId) {
+  if (!txId) return '';
+  const chain = explorerChainId || 'ut-mainnet-1';
+  const href = '/explorer-api/' + encodeURIComponent(chain) +
+    '/transactions/' + encodeURIComponent(txId);
+  const shortId = txId.length > 12 ? (txId.slice(0, 6) + '…' + txId.slice(-4)) : txId;
+  return '<a class="mg-guess-tx" href="' + href + '" target="_blank" rel="noopener" ' +
+    'onclick="event.stopPropagation()" title="View this guess on chain (' + escapeHtml(txId) + ')">' +
+    '🔗 ' + escapeHtml(shortId) + '</a>';
+}
+
 async function refreshMyGames() {
   const list = document.getElementById('mygames-list');
   const summary = document.getElementById('mygames-summary');
@@ -2339,6 +2364,7 @@ function renderMyGames() {
           '<span class="mg-guess-idx">Guess ' + idx + '</span>' +
           '<span class="mg-guess-val">' + g.guess + '</span>' +
           (distPart ? '<span class="mg-guess-dist">' + distPart + '</span>' : '') +
+          explorerTxLink(g.tx_id) +
         '</div>';
       }).join('');
       detailHtml = '<div class="mg-detail">' + secretLine + guessRows + '</div>';
