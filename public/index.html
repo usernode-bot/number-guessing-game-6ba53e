@@ -63,65 +63,112 @@
   <script src="/usernode-usernames.js"></script>
   <script src="/usernode-loading.js"></script>
 
+  <!-- Rounded display typeface for the playful redesign; system-ui fallback in
+       the CSS stack so text always renders even if the font is blocked. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&display=swap" rel="stylesheet">
+
   <style>
     :root {
-      /* Softer dark theme — muted periwinkle accent, gentler glow. */
-      --accent: #8b7cf0;
-      --accent-light: #b3a6f7;
-      --accent-dark: #7468d6;
-      --accent-glow: rgba(139,124,240,0.22);
-      --accent-soft: rgba(139,124,240,0.12);
-      --accent-soft-border: rgba(139,124,240,0.26);
-      /* Calm secondary pastels (shared with light theme below). */
-      --mint: #6fd6b6;
-      --sky: #79c6ee;
-      --peach: #f6b89a;
-      --calm: #b3a6f7;
-      --bg: #0a0b14;
-      --bg-grad: radial-gradient(130% 90% at 50% -5%, rgba(139,124,240,0.12) 0%, rgba(139,124,240,0.03) 50%, transparent 72%);
-      --bg-elev: #12141f;
-      --bg-card: #161927;
-      --bg-card-hover: #1c2032;
-      --text: #e2e6f3;
-      --text-muted: #8b97b5;
-      --text-faint: #3a4258;
-      --border: rgba(120,135,200,0.14);
-      --border-strong: rgba(140,155,220,0.26);
-      --shadow: 0 12px 40px rgba(0,0,0,0.50);
-      --shadow-sm: 0 2px 14px rgba(0,0,0,0.28);
-      --radius: 1.4rem;
-      --radius-sm: 0.9rem;
+      /* ===== Neon night (dark theme) — vivid accents that glow on deep bg ===== */
+      --font-display: 'Fredoka', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --accent: #a78bff;
+      --accent-light: #c4b3ff;
+      --accent-dark: #8b6cff;
+      --accent-glow: rgba(167,139,255,0.40);
+      --accent-soft: rgba(167,139,255,0.16);
+      --accent-soft-border: rgba(167,139,255,0.34);
+      /* Per-track signature hues */
+      --track-1h: #ff8a5c;
+      --track-6h: #ffd23f;
+      --track-1d: #2dd4bf;
+      --track-1w: #5aa9ff;
+      /* Per-difficulty hues */
+      --diff-easy: #3ee08a;
+      --diff-medium: #a78bff;
+      --diff-hard: #ff5d8f;
+      /* Active track hue (overridden per-track on the game panel) */
+      --track-active: var(--accent);
+      /* Candy secondary palette (also feeds legacy --mint/--sky/--peach/--calm) */
+      --candy-pink: #ff5d8f;
+      --candy-yellow: #ffd23f;
+      --candy-mint: #2dd4bf;
+      --candy-sky: #5aa9ff;
+      --candy-peach: #ff8a5c;
+      --mint: #2dd4bf;
+      --sky: #5aa9ff;
+      --peach: #ff8a5c;
+      --calm: #c4b3ff;
+      --gold: #ffd23f;
+      --silver: #c7d0e0;
+      --bronze: #ff9d5c;
+      --bg: #0b0a1a;
+      --bg-grad: radial-gradient(120% 80% at 50% -5%, rgba(167,139,255,0.18) 0%, transparent 60%);
+      --bg-elev: #14122a;
+      --bg-card: #181534;
+      --bg-card-hover: #211c44;
+      --text: #ece9ff;
+      --text-muted: #9b93c8;
+      --text-faint: #4a4470;
+      --border: rgba(150,135,235,0.18);
+      --border-strong: rgba(170,150,245,0.32);
+      --shadow: 0 16px 48px rgba(0,0,0,0.55);
+      --shadow-sm: 0 4px 18px rgba(0,0,0,0.34);
+      --radius: 1.5rem;
+      --radius-sm: 1rem;
       --nav-h: 64px;
       --safe-b: env(safe-area-inset-bottom, 0px);
       --safe-t: env(safe-area-inset-top, 0px);
       --maxw: 540px;
+      /* Animated background-wash tints */
+      --wash-1: rgba(167,139,255,0.16);
+      --wash-2: rgba(45,212,191,0.13);
+      --wash-3: rgba(255,93,143,0.13);
     }
     [data-theme="light"] {
-      /* Calm light pastel: muted periwinkle-lavender accent, no neon glow,
-         soft off-white surfaces, diffuse low-opacity shadows. */
-      --accent: #8b7cf0;
-      --accent-light: #7d6ee8;
-      --accent-dark: #6a5bd0;
-      --accent-glow: rgba(139,124,240,0.16);
-      --accent-soft: rgba(139,124,240,0.10);
-      --accent-soft-border: rgba(139,124,240,0.22);
-      /* Secondary pastels for badges / tints. */
-      --mint: #4cc4a0;
-      --sky: #5aa9dd;
-      --peach: #e89a72;
-      --calm: #8b7cf0;
-      --bg: #f7f5fb;
-      --bg-grad: radial-gradient(135% 85% at 50% -8%, rgba(139,124,240,0.07) 0%, rgba(167,196,240,0.04) 45%, transparent 72%);
+      /* ===== Daylight arcade (default) — bright, candy-saturated on soft white ===== */
+      --accent: #6d4bf0;
+      --accent-light: #7c5cff;
+      --accent-dark: #5736d6;
+      --accent-glow: rgba(109,75,240,0.28);
+      --accent-soft: rgba(109,75,240,0.10);
+      --accent-soft-border: rgba(109,75,240,0.24);
+      --track-1h: #ff6f3c;
+      --track-6h: #ff9f1c;
+      --track-1d: #12b886;
+      --track-1w: #2f7df6;
+      --diff-easy: #1eb15a;
+      --diff-medium: #6d4bf0;
+      --diff-hard: #ec4899;
+      --track-active: var(--accent);
+      --candy-pink: #ff4d8d;
+      --candy-yellow: #ffb703;
+      --candy-mint: #12b886;
+      --candy-sky: #2f7df6;
+      --candy-peach: #ff6f3c;
+      --mint: #12b886;
+      --sky: #2f7df6;
+      --peach: #ff6f3c;
+      --calm: #7c5cff;
+      --gold: #f59e0b;
+      --silver: #94a3b8;
+      --bronze: #d97706;
+      --bg: #f4f1fb;
+      --bg-grad: radial-gradient(120% 80% at 50% -8%, rgba(109,75,240,0.10) 0%, transparent 60%);
       --bg-elev: #ffffff;
       --bg-card: #ffffff;
-      --bg-card-hover: #f4f2fc;
-      --text: #3a3357;
-      --text-muted: #847da3;
-      --text-faint: #c5c1da;
-      --border: rgba(60,50,110,0.08);
-      --border-strong: rgba(60,50,110,0.15);
-      --shadow: 0 14px 40px rgba(90,80,150,0.10);
-      --shadow-sm: 0 3px 16px rgba(90,80,150,0.07);
+      --bg-card-hover: #f6f3ff;
+      --text: #2c2452;
+      --text-muted: #7a7299;
+      --text-faint: #c9c3e0;
+      --border: rgba(80,60,160,0.10);
+      --border-strong: rgba(80,60,160,0.20);
+      --shadow: 0 16px 44px rgba(100,80,180,0.14);
+      --shadow-sm: 0 4px 18px rgba(100,80,180,0.10);
+      --wash-1: rgba(109,75,240,0.10);
+      --wash-2: rgba(18,184,134,0.08);
+      --wash-3: rgba(255,77,141,0.08);
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 16px; -webkit-text-size-adjust: 100%; }
@@ -494,6 +541,12 @@
     .mg-guess-idx { color: var(--text-muted); font-size: .7rem; min-width: 3.4rem; }
     .mg-guess-val { font-weight: 800; font-variant-numeric: tabular-nums; }
     .mg-guess-dist { color: var(--text-muted); font-size: .72rem; margin-left: auto; }
+    .mg-guess-tx {
+      margin-left: auto; font-size: .68rem; color: var(--text-muted);
+      text-decoration: none; white-space: nowrap; font-variant-numeric: tabular-nums;
+      border-bottom: 1px dotted color-mix(in srgb, var(--text-muted) 60%, transparent);
+    }
+    .mg-guess-tx:hover { color: var(--accent-light); }
     .mg-guess-row.is-hit .mg-guess-val { color: var(--accent-light); }
     /* ---- Bottom Nav ---- */
     .bottom-nav {
@@ -614,6 +667,117 @@
       margin: 0 .25rem 1rem; padding: .6rem .9rem;
       background: var(--bg-card); border: 1px solid var(--border);
       border-radius: var(--radius-sm);
+    }
+
+    /* ============================================================
+       Playful & colorful redesign — overrides + new motion
+       (appended last so equal-specificity rules win by source order)
+       ============================================================ */
+
+    /* Animated multi-color background wash behind everything */
+    body::before {
+      content: ''; position: fixed; inset: -20%; z-index: -1; pointer-events: none;
+      background:
+        radial-gradient(38% 38% at 18% 16%, var(--wash-1) 0%, transparent 70%),
+        radial-gradient(42% 42% at 84% 22%, var(--wash-2) 0%, transparent 72%),
+        radial-gradient(46% 46% at 50% 98%, var(--wash-3) 0%, transparent 72%);
+      animation: bg-wash 26s ease-in-out infinite alternate;
+    }
+    @keyframes bg-wash {
+      0%   { transform: translate3d(-2%,-1%,0) scale(1); }
+      50%  { transform: translate3d(2%,2%,0) scale(1.08); }
+      100% { transform: translate3d(-1%,1%,0) scale(1.03); }
+    }
+
+    /* Rounded display typeface for headings / numbers / badges / key labels */
+    .header-title, .round-badge, .mode-badge, .guess-number, .result-secret,
+    .guess-counter, .streak-bar strong, .streak-bar span, .nav-btn, .modal-title,
+    .signin-title, .section-header, .result-heading, .timesup-banner .tu-title,
+    .bullseye-badge, .mg-stat strong, .lb-best-win span, .hist-secret, .seg-btn,
+    .btn, .welcome-greeting, .guess-label, .my-guesses-label, .locked-text strong,
+    .result-label, .empty-state p, .mygames-summary .mg-stat small {
+      font-family: var(--font-display);
+    }
+    .guess-number, .result-secret, .hist-secret { font-weight: 700; }
+
+    /* Candy primary button (secondary stays neutral) */
+    .btn { background: linear-gradient(135deg, var(--accent), var(--candy-pink)); box-shadow: 0 8px 24px var(--accent-glow); }
+    .btn-secondary { background: var(--bg-elev); box-shadow: none; }
+    .btn-secondary:hover:not(:disabled) { background: var(--bg-card-hover); }
+    .btn:active:not(:disabled) { transform: scale(.96); }
+
+    /* Track-tinted round badge + streak (hue inherited from the game panel) */
+    #panel-game[data-track="1h"] { --track-active: var(--track-1h); }
+    #panel-game[data-track="6h"] { --track-active: var(--track-6h); }
+    #panel-game[data-track="1d"] { --track-active: var(--track-1d); }
+    #panel-game[data-track="1w"] { --track-active: var(--track-1w); }
+    .round-badge {
+      background: linear-gradient(135deg, var(--track-active), color-mix(in srgb, var(--track-active) 60%, #000 16%));
+      box-shadow: 0 3px 12px color-mix(in srgb, var(--track-active) 45%, transparent);
+    }
+    .streak-bar { border-left: 5px solid var(--track-active); }
+    #streak-current { color: var(--track-active); }
+
+    /* Track segmented-control active hues (game + history selectors) */
+    #gs-1h.active, #hs-1h.active { background: linear-gradient(135deg, var(--track-1h), color-mix(in srgb, var(--track-1h) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--track-1h) 45%, transparent); }
+    #gs-6h.active, #hs-6h.active { background: linear-gradient(135deg, var(--track-6h), color-mix(in srgb, var(--track-6h) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--track-6h) 45%, transparent); }
+    #gs-1d.active, #hs-1d.active { background: linear-gradient(135deg, var(--track-1d), color-mix(in srgb, var(--track-1d) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--track-1d) 45%, transparent); }
+    #gs-1w.active, #hs-1w.active { background: linear-gradient(135deg, var(--track-1w), color-mix(in srgb, var(--track-1w) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--track-1w) 45%, transparent); }
+
+    /* Difficulty hues — leaderboard tabs + mode-picker segments + difficulty badge */
+    #lb-easy.active, #seg-easy.active { background: linear-gradient(135deg, var(--diff-easy), color-mix(in srgb, var(--diff-easy) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--diff-easy) 42%, transparent); }
+    #lb-medium.active, #seg-medium.active { background: linear-gradient(135deg, var(--diff-medium), color-mix(in srgb, var(--diff-medium) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--diff-medium) 42%, transparent); }
+    #lb-hard.active, #seg-hard.active { background: linear-gradient(135deg, var(--diff-hard), color-mix(in srgb, var(--diff-hard) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--diff-hard) 42%, transparent); }
+    .mode-badge[data-diff="easy"]   { color: var(--diff-easy);   border-color: color-mix(in srgb, var(--diff-easy) 55%, transparent);   background: color-mix(in srgb, var(--diff-easy) 14%, transparent); }
+    .mode-badge[data-diff="medium"] { color: var(--diff-medium); border-color: color-mix(in srgb, var(--diff-medium) 55%, transparent); background: color-mix(in srgb, var(--diff-medium) 14%, transparent); }
+    .mode-badge[data-diff="hard"]   { color: var(--diff-hard);   border-color: color-mix(in srgb, var(--diff-hard) 55%, transparent);   background: color-mix(in srgb, var(--diff-hard) 14%, transparent); }
+
+    /* Leaderboard medals (theme-aware) */
+    .lb-rank.gold { color: var(--gold); }
+    .lb-rank.silver { color: var(--silver); }
+    .lb-rank.bronze { color: var(--bronze); }
+
+    /* Bottom nav — per-section active colors + bounce */
+    @keyframes nav-bounce { 0%,100% { transform: translateY(-1px) scale(1.08); } 50% { transform: translateY(-5px) scale(1.18); } }
+    .nav-btn.active .nav-icon { animation: nav-bounce .5s cubic-bezier(.34,1.3,.64,1); }
+    #nav-game.active { color: var(--accent); }
+    #nav-game.active::before { background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+    #nav-leaderboard.active { color: var(--candy-yellow); }
+    #nav-leaderboard.active::before { background: var(--candy-yellow); box-shadow: 0 0 10px color-mix(in srgb, var(--candy-yellow) 60%, transparent); }
+    #nav-history.active { color: var(--candy-peach); }
+    #nav-history.active::before { background: var(--candy-peach); box-shadow: 0 0 10px color-mix(in srgb, var(--candy-peach) 60%, transparent); }
+    #nav-mygames.active { color: var(--candy-mint); }
+    #nav-mygames.active::before { background: var(--candy-mint); box-shadow: 0 0 10px color-mix(in srgb, var(--candy-mint) 60%, transparent); }
+
+    /* Hero number springy pop on change */
+    @keyframes num-pop { 0% { transform: scale(1); } 42% { transform: scale(1.13); } 100% { transform: scale(1); } }
+    .guess-number.pop { animation: num-pop .32s cubic-bezier(.34,1.4,.64,1); }
+
+    /* Guess-row drop-in bounce (confirmed rows only; pending stays dimmed) */
+    @keyframes guess-drop { 0% { opacity: 0; transform: translateY(-10px) scale(.96); } 60% { opacity: 1; transform: translateY(2px) scale(1.02); } 100% { transform: none; } }
+    .my-guess-row.drop-in { animation: guess-drop .42s cubic-bezier(.34,1.3,.64,1); }
+
+    /* Colorful slider track — decorative across the full 1…range domain only,
+       never a hot/cold proximity hint. */
+    .guess-slider { background: linear-gradient(to right, var(--accent) 0%, var(--candy-pink) var(--val,50%), var(--border-strong) var(--val,50%)); }
+
+    /* Triumphant result card on a win */
+    .result-card.is-win {
+      background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 16%, var(--bg-card)), var(--bg-card));
+      border-color: var(--accent-soft-border);
+      box-shadow: 0 12px 40px var(--accent-glow);
+    }
+
+    /* Confetti overlay (created on demand by JS) */
+    #confetti-canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 400; }
+
+    /* Reduced motion — neutralize all motion to instant/static */
+    @media (prefers-reduced-motion: reduce) {
+      body::before { animation: none; }
+      .guess-number.pop, .my-guess-row.drop-in, .nav-btn.active .nav-icon,
+      .streak-pop, .panel, .modal, .locked-badge, .timesup-banner,
+      .bullseye-badge, .result-card { animation: none !important; }
+      .btn:active:not(:disabled) { transform: none; }
     }
   </style>
 </head>
@@ -874,6 +1038,9 @@ const TRACKS = ['1h', '6h', '1d', '1w'];
 let myAddress = null;
 let myPubkey = null;
 let appPubkey = null;
+// Live chain id from /__numguess/state, used to build "View on chain" explorer
+// links for My Games guess rows. Falls back to the testnet chain if absent.
+let explorerChainId = null;
 let myUsername = null;
 let loggedIn = false;
 let gameState = null;
@@ -936,6 +1103,115 @@ function toggleTheme() {
   } catch {}
 })();
 
+// ---- Motion helpers (playful redesign) ----
+const _reduceMotionMQ = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+function prefersReducedMotion() { return !!(_reduceMotionMQ && _reduceMotionMQ.matches); }
+
+// Apply the selected track's signature hue to the game panel (round badge,
+// streak, etc.) via a CSS custom property keyed off a data-track attribute.
+function applyTrackTheme() {
+  const panel = document.getElementById('panel-game');
+  if (panel) panel.setAttribute('data-track', selectedTrack);
+}
+
+// Odometer/slot-machine reveal for the secret number: scrambles briefly then
+// settles on `value`. Re-render-safe — keyed on the value via a dataset flag so
+// the ~4s poll loop doesn't restart the roll. Reduced-motion → instant.
+function rollSecret(el, value) {
+  if (!el) return;
+  if (value == null) { el.textContent = '?'; el.dataset.rolledTo = ''; return; }
+  const v = String(value);
+  if (el.dataset.rolledTo === v) { el.textContent = v; return; }
+  el.dataset.rolledTo = v;
+  if (prefersReducedMotion()) { el.textContent = v; return; }
+  const cap = Math.max(9, value);
+  const dur = 850;
+  const start = performance.now();
+  function frame(now) {
+    const t = Math.min(1, (now - start) / dur);
+    if (t < 1) {
+      el.textContent = String(Math.floor(Math.random() * cap) + 1);
+      requestAnimationFrame(frame);
+    } else {
+      el.textContent = v;
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+// Hero number springy pop on change.
+function bumpHero() {
+  const n = document.getElementById('guess-number');
+  if (!n) return;
+  n.classList.remove('pop'); void n.offsetWidth; n.classList.add('pop');
+}
+
+// Rounds whose celebration has already fired (render() runs every poll, so
+// confetti must fire at most once per won round).
+const celebratedRounds = new Set();
+// Confirmed guess rows already drop-in-animated, keyed `roundId:value`, so the
+// bounce plays once when a guess first lands and never re-fires on later polls.
+const animatedGuesses = new Set();
+
+// Dependency-free confetti burst. No-op under reduced motion; auto-cleans.
+function fireConfetti() {
+  if (prefersReducedMotion()) return;
+  let canvas = document.getElementById('confetti-canvas');
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.id = 'confetti-canvas';
+    document.body.appendChild(canvas);
+  }
+  const dpr = window.devicePixelRatio || 1;
+  const W = window.innerWidth, H = window.innerHeight;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) { canvas.remove(); return; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const read = (name) => {
+    const c = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return c || '#7c5cff';
+  };
+  const colors = ['--accent', '--candy-pink', '--candy-yellow', '--candy-mint', '--candy-sky', '--candy-peach'].map(read);
+  const parts = [];
+  for (let i = 0; i < 130; i++) {
+    parts.push({
+      x: W / 2 + (Math.random() - 0.5) * 90,
+      y: H * 0.38 + (Math.random() - 0.5) * 40,
+      vx: (Math.random() - 0.5) * 9,
+      vy: Math.random() * -11 - 4,
+      g: 0.28 + Math.random() * 0.12,
+      size: 5 + Math.random() * 7,
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.3,
+      color: colors[i % colors.length],
+    });
+  }
+  const t0 = performance.now();
+  const LIFE = 1700;
+  function tick(now) {
+    const elapsed = now - t0;
+    ctx.clearRect(0, 0, W, H);
+    const fade = Math.max(0, 1 - elapsed / LIFE);
+    let alive = 0;
+    for (const p of parts) {
+      p.vy += p.g; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      if (p.y < H + 40 && fade > 0) alive++;
+      ctx.save();
+      ctx.globalAlpha = fade;
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      ctx.restore();
+    }
+    if (elapsed < LIFE && alive > 0) requestAnimationFrame(tick);
+    else canvas.remove();
+  }
+  requestAnimationFrame(tick);
+}
+
 // ---- Tabs ----
 function switchTab(tab) {
   if (winAutoSwitchTimer) { clearTimeout(winAutoSwitchTimer); winAutoSwitchTimer = null; }
@@ -954,6 +1230,7 @@ function setGameTrack(track) {
   TRACKS.forEach((t) => {
     document.getElementById('gs-' + t).classList.toggle('active', t === track);
   });
+  applyTrackTheme();
   if (gameState) render();
 }
 
@@ -1260,6 +1537,7 @@ function updateSliderFill() {
 slider.addEventListener('input', () => {
   numInput.value = slider.value;
   updateSliderFill();
+  bumpHero();
 });
 numInput.addEventListener('input', () => {
   let v = parseInt(numInput.value, 10);
@@ -1268,6 +1546,7 @@ numInput.addEventListener('input', () => {
   v = Math.max(1, Math.min(range, v));
   slider.value = v;
   updateSliderFill();
+  bumpHero();
 });
 updateSliderFill();
 
@@ -1823,6 +2102,7 @@ async function refreshState() {
       window.usernode = window.usernode || {};
       window.usernode.serverCacheUrl = '/__usernode/cache/' + appPubkey;
     }
+    if (data.chainId) explorerChainId = data.chainId;
 
     if (data.loading) return;
 
@@ -1862,6 +2142,7 @@ function render() {
   // Drop optimistic guesses the chain has caught up to (or that no longer
   // apply) before deriving anything from them.
   reconcilePendingGuesses();
+  applyTrackTheme();
   const td = gameState.tracks[selectedTrack] || {};
   const round = td.currentRound || null;
 
@@ -1896,6 +2177,7 @@ function render() {
     const diffCls = { easy: '', medium: '', hard: ' hard' };
     modeBadge.style.display = '';
     modeBadge.className = 'mode-badge' + (diffCls[diff] || '');
+    modeBadge.dataset.diff = diff;
     modeBadge.textContent = (diffLabels[diff] || diff) + ' · 1–' + range;
   } else {
     document.getElementById('round-badge').textContent = 'No active round';
@@ -2075,14 +2357,21 @@ function updateGuessCard(round, myGuesses, maxGuesses, allGuessesUsed) {
   if (myGuesses.length > 0) {
     myGuessesList.style.display = '';
     myGuessesList.innerHTML = '<div class="my-guesses-label">My guesses this round</div>' +
-      myGuesses.map((g, i) =>
-        '<div class="my-guess-row' + (g.pending ? ' is-pending' : '') + '">' +
+      myGuesses.map((g, i) => {
+        // Drop-in bounce only the first time a guess appears CONFIRMED — pending
+        // rows keep their dimmed state and animate once they reconcile.
+        let drop = '';
+        if (!g.pending && round) {
+          const akey = round.id + ':' + g.guess;
+          if (!animatedGuesses.has(akey)) { animatedGuesses.add(akey); drop = ' drop-in'; }
+        }
+        return '<div class="my-guess-row' + (g.pending ? ' is-pending' : drop) + '">' +
         (g.pending ? '<span class="my-guess-pending-dot"></span>' : '') +
         '<span class="my-guess-val">' + g.guess + '</span>' +
         '<span class="my-guess-tag' + (g.pending ? ' is-pending' : '') + '">' +
         (g.pending ? 'Placing…' : 'Guess ' + (i + 1)) + '</span>' +
-        '</div>'
-      ).join('');
+        '</div>';
+      }).join('');
   } else {
     myGuessesList.style.display = 'none';
   }
@@ -2111,7 +2400,17 @@ function computeRoundScore(difficulty, numGuesses, won, bestDistance) {
 
 function renderResult(round, myGuesses) {
   const secret = round.secret;
-  document.getElementById('result-secret').textContent = secret != null ? secret : '?';
+  // Slot-machine reveal (reduced-motion → instant), re-render-safe.
+  rollSecret(document.getElementById('result-secret'), secret);
+
+  // Triumphant treatment + one-shot confetti when the signed-in player won.
+  const iWonRound = !!(round.winner && round.winner === myAddress);
+  const resultCard = document.getElementById('result-card');
+  if (resultCard) resultCard.classList.toggle('is-win', iWonRound);
+  if (iWonRound && !celebratedRounds.has(round.id)) {
+    celebratedRounds.add(round.id);
+    fireConfetti();
+  }
 
   const isTimed = round.mode === 'timed';
   const noWinner = !round.winner;
@@ -2309,6 +2608,21 @@ function toggleMyGameRow(roundId) {
   renderMyGames();
 }
 
+// "View on chain" reference for a guess row. Builds a link through the public
+// /explorer-api proxy to the guess's on-chain transaction. Returns '' when the
+// guess carries no tx reference (older rows / DB-disabled edge cases) so the row
+// simply omits the link rather than rendering a dead one.
+function explorerTxLink(txId) {
+  if (!txId) return '';
+  const chain = explorerChainId || 'ut-mainnet-1';
+  const href = '/explorer-api/' + encodeURIComponent(chain) +
+    '/transactions/' + encodeURIComponent(txId);
+  const shortId = txId.length > 12 ? (txId.slice(0, 6) + '…' + txId.slice(-4)) : txId;
+  return '<a class="mg-guess-tx" href="' + href + '" target="_blank" rel="noopener" ' +
+    'onclick="event.stopPropagation()" title="View this guess on chain (' + escapeHtml(txId) + ')">' +
+    '🔗 ' + escapeHtml(shortId) + '</a>';
+}
+
 async function refreshMyGames() {
   const list = document.getElementById('mygames-list');
   const summary = document.getElementById('mygames-summary');
@@ -2414,6 +2728,7 @@ function renderMyGames() {
           '<span class="mg-guess-idx">Guess ' + idx + '</span>' +
           '<span class="mg-guess-val">' + g.guess + '</span>' +
           (distPart ? '<span class="mg-guess-dist">' + distPart + '</span>' : '') +
+          explorerTxLink(g.tx_id) +
         '</div>';
       }).join('');
       detailHtml = '<div class="mg-detail">' + secretLine + guessRows + '</div>';

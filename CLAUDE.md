@@ -40,17 +40,32 @@ shared understanding of what this app is for)_
   (`getMyStreaks` / `getTrackStreaks`). The chain remains the source of
   truth for live state — derive new gameplay state from chain data, not
   a table.
-- **The one database table is `game_results`** (see `lib/db.js`): a
-  durable, per-user projection of each authenticated player's finished
-  rounds (guess count, win/outcome, best guess/distance, pot, timestamp),
-  keyed to `req.user`. It's written lazily when a signed-in player reads
+- **There are three Postgres tables** (see `lib/db.js`), all **public**
+  (every field is already public on-chain) and all applied idempotently
+  on boot via `db.initSchema()`:
+  - **`game_results`** — a durable, per-user projection of each
+    authenticated player's finished rounds (guess count, win/outcome,
+    best guess/distance, pot, timestamp), keyed to `req.user`.
+  - **`game_guesses`** — the per-guess companion to `game_results`: one
+    row per individual guess in a finished round, also keyed to
+    `req.user`, now carrying the guess's on-chain `tx_id`.
+  Both of the above are written **lazily** when a signed-in player reads
   their history via `GET /api/my-history`, and read back for the "My
-  Games" tab. The table is **public** (every field is already public
-  on-chain) and the schema is applied idempotently on boot via
-  `db.initSchema()`. `DATABASE_URL` is platform-injected; if it's absent
-  the history endpoint degrades to freshly-derived (unsaved) results
-  rather than failing. Keep deriving *gameplay* state from the chain —
-  only durable per-user records belong in `game_results`.
+  Games" tab.
+  - **`guess_ledger`** — the authoritative, **append-only** capture of
+    every guess from every player, keyed by its on-chain transaction id
+    (`tx_id` UNIQUE) and the sender wallet (`from_pubkey`). Unlike the two
+    projections above, it is written from the server's transaction stream
+    (`processTransactionWithLedger` → `db.appendGuess`) as each guess tx is
+    ingested — for active and finished rounds alike, regardless of whether
+    the player ever opens their history. `ON CONFLICT (tx_id) DO NOTHING`
+    makes the cache's boot-time replay a safe, self-healing backfill, so
+    the ledger can be processed and replayed from chain.
+  `DATABASE_URL` is platform-injected; if it's absent every `db` function
+  becomes a no-op and the history endpoint degrades to freshly-derived
+  (unsaved) results rather than failing. Keep deriving *gameplay* state
+  from the chain — only durable per-user records and the ledger belong in
+  Postgres.
 
 - **Vendored divergence — `lib/dapp-server.js` `handleExplorerProxy`
   has a request timeout.** The upstream copy proxies explorer requests

@@ -12,6 +12,7 @@ const {
   createAppStateCache,
   createUsernamesCache,
   createNodeStatusProbe,
+  discoverChainInfo,
   EXPLORER_PROXY_PREFIX,
 } = require('./lib/dapp-server');
 const { createGame, DIFFICULTIES, computeRoundScore } = require('./game-logic');
@@ -57,6 +58,14 @@ const inFlightPayout = { '1h': false, '6h': false, '1d': false, '1w': false };
 let dbWarned = false;
 // One-shot guard for the wallet/JWT pubkey mismatch diagnostic (see /api/my-history).
 let derivedMismatchWarned = false;
+// One-shot guard so a failing guess_ledger append (DB down mid-stream) logs once
+// rather than on every ingested guess tx.
+let ledgerWarned = false;
+
+// Live chain id, resolved once at boot via discoverChainInfo. Surfaced in
+// /__numguess/state so the frontend can build "View on chain" explorer links
+// through the public /explorer-api proxy without hardcoding the chain id.
+let resolvedChainId = 'ut-mainnet-1';
 
 // Staging demo identity + rows for the "My Games" tab. A real staging reviewer
 // signs in as themselves, whose wallet never matches the seeded on-chain
@@ -114,6 +123,9 @@ const STAGING_DEMO_GUESSES = (() => {
         distance: Math.abs(guess - spec.secret),
         amount: 1,
         guessed_at: now - (spec.guesses.length - i) * min,
+        // Obviously-fake on-chain reference so the "View on chain" link is
+        // populated in the staging demo. Deterministic per round + index.
+        tx_id: 'staging-demo-tx-' + roundId + '-' + (i + 1),
       });
     });
   }
@@ -197,6 +209,7 @@ function collectUserGuesses(pubkey) {
         distance: secret != null ? Math.abs(g.guess - secret) : null,
         amount: g.amount || 0,
         guessed_at: g.ts || null,
+        tx_id: g.id || null,
       });
     });
   }
@@ -215,6 +228,7 @@ function groupGuessesByRound(rows) {
       guess: g.guess,
       distance: g.distance,
       amount: g.amount,
+      tx_id: g.tx_id || null,
       guessed_at: g.guessed_at,
     });
   }
@@ -324,11 +338,73 @@ function syncHiddenFromUsernames() {
   return map;
 }
 
+// Authoritative ledger capture. The app's transaction stream sees every guess
+// from every player with a stable on-chain tx id, and the cache replays all
+// transactions on every (re)start — so writing the ledger here makes it both
+// complete (active + finished rounds, regardless of whether the player ever
+// opens their history) and self-healing (boot replay backfills, ON CONFLICT
+// dedupes). It must never block or break the stream: the append is
+// fire-and-forget, errors are swallowed + logged once, and the whole thing is a
+// no-op when persistence is disabled.
+function ingestGuessIntoLedger(rawTx) {
+  if (!db.isEnabled() || !rawTx) return;
+  const id = rawTx.id || rawTx.txid || rawTx.txId || rawTx.tx_id || rawTx.hash;
+  if (!id) return;
+  let memo = rawTx.memo;
+  if (typeof memo === 'string') {
+    try { memo = JSON.parse(memo); } catch { return; }
+  }
+  if (!memo || memo.app !== 'numguess' || memo.type !== 'guess') return;
+  const roundId = memo.round;
+  if (roundId == null) return;
+  const guess = parseInt(memo.guess, 10);
+  if (!Number.isFinite(guess)) return;
+
+  const from = rawTx.from_pubkey || rawTx.from || rawTx.source || '';
+  if (!from) return;
+  const ts = rawTx.timestamp_ms ||
+    (rawTx.created_at ? new Date(rawTx.created_at).getTime() : null);
+  // track / difficulty come from the round the guess belongs to (already
+  // ingested by the time the wrapped processTransaction returns).
+  const round = game.rounds.get(roundId);
+
+  db.appendGuess({
+    tx_id: String(id),
+    from_pubkey: String(from),
+    round_id: roundId,
+    track: round ? (round.durationTrack || null) : null,
+    difficulty: round ? (round.difficulty || null) : null,
+    guess,
+    amount: typeof rawTx.amount === 'number' ? rawTx.amount : (parseInt(rawTx.amount, 10) || 0),
+    memo: typeof rawTx.memo === 'string' ? rawTx.memo : JSON.stringify(memo),
+    tx_timestamp: ts,
+  }).catch((e) => {
+    if (!ledgerWarned) {
+      console.error('[ledger] guess_ledger append failed (capture degraded):', e.message);
+      ledgerWarned = true;
+    }
+  });
+}
+
+// Wrap the game's processTransaction so the stream remains the single ingestion
+// point: derive live state first (unchanged), then mirror guess txs into the
+// durable ledger. Capture errors here too so a thrown ledger hook can never
+// break state derivation.
+function processTransactionWithLedger(rawTx) {
+  game.processTransaction(rawTx);
+  try { ingestGuessIntoLedger(rawTx); } catch (e) {
+    if (!ledgerWarned) {
+      console.error('[ledger] guess_ledger ingest hook threw (capture degraded):', e.message);
+      ledgerWarned = true;
+    }
+  }
+}
+
 const numguessCache = createAppStateCache({
   name: 'numguess',
   appPubkey: APP_PUBKEY,
   queryField: 'recipient',
-  processTransaction: game.processTransaction,
+  processTransaction: processTransactionWithLedger,
   nodeRpcUrl: NODE_RPC_URL,
 });
 
@@ -1102,6 +1178,7 @@ app.get('/__numguess/state', async (req, res) => {
   syncHiddenFromUsernames();
   const state = game.getStateResponse();
   state.staging = IS_STAGING;
+  state.chainId = resolvedChainId;
   state.pendingDifficulty = { ...pendingDifficulty };
 
   // Per-track win streaks for the signed-in player, derived purely from the
@@ -1413,15 +1490,31 @@ async function start() {
   }
 
   if (IS_STAGING) {
+    // injectStagingSeeds() feeds the seeded guess txs through the same ingest
+    // path as real chain txs (injectSeedTransactions → processTransactionWithLedger),
+    // so guess_ledger is populated automatically in staging — no separate ledger
+    // seed loop needed (and ON CONFLICT (tx_id) keeps it idempotent on rebuilds).
     injectStagingSeeds();
     // Seed the demo player's saved history so the My Games tab is populated in
     // staging review. Idempotent; serves the same rows the ?demo=1 path returns.
+    // STAGING_DEMO_GUESSES now carry a tx_id, so the demo "View on chain" link
+    // is populated through the game_guesses projection too.
     try {
       await db.upsertResults(STAGING_DEMO_USER, STAGING_DEMO_RESULTS);
       await db.upsertGuesses(STAGING_DEMO_USER, STAGING_DEMO_GUESSES);
     } catch (e) {
       console.warn('[staging] demo game_results seed skipped:', e.message);
     }
+  }
+
+  // Resolve the live chain id once so /__numguess/state can hand the frontend a
+  // base for "View on chain" explorer links (through the public /explorer-api
+  // proxy). Best-effort: a failure leaves the ut-mainnet-1 default.
+  try {
+    const info = await discoverChainInfo({ nodeRpcUrl: NODE_RPC_URL });
+    if (info && info.chainId) resolvedChainId = info.chainId;
+  } catch (e) {
+    console.warn('[boot] chain id discovery failed, using default:', e.message);
   }
 
   await numguessCache.start();
