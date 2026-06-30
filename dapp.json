@@ -40,6 +40,11 @@
       "expectSelector": ".header"
     },
     {
+      "name": "Demo mode loads without console errors (My Games union read-back path)",
+      "path": "/?demo=1",
+      "expectSelector": "#guess-btn"
+    },
+    {
       "name": "Place Guess button is present on the Game tab",
       "path": "/",
       "expectSelector": "#guess-btn"

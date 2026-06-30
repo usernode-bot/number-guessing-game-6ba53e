@@ -5,7 +5,8 @@
   "description": "Number Guessing Game",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test/my-history-union.test.js"
   },
   "dependencies": {
     "express": "^4.21.0",
