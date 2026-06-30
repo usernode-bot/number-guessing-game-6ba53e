@@ -1,10 +1,19 @@
 'use strict';
 
 const DIFFICULTIES = {
-  easy:   { range: 10,   maxGuesses: 5  },
-  medium: { range: 100,  maxGuesses: 10 },
-  hard:   { range: 1000, maxGuesses: 15 },
+  easy:   { range: 10,   maxGuesses: 5,  base: 100  },
+  medium: { range: 100,  maxGuesses: 10, base: 300  },
+  hard:   { range: 1000, maxGuesses: 15, base: 1000 },
 };
+
+// Score earned for a won round. Returns 0 for losses.
+// Formula: base × max(1, maxGuesses − numGuesses + 1), doubled on a bullseye.
+function computeRoundScore(difficulty, numGuesses, won, bestDistance) {
+  if (!won) return 0;
+  const cfg = DIFFICULTIES[difficulty] || DIFFICULTIES.medium;
+  const score = cfg.base * Math.max(1, cfg.maxGuesses - numGuesses + 1);
+  return bestDistance === 0 ? score * 2 : score;
+}
 
 function createGame(opts) {
   opts = opts || {};
@@ -235,20 +244,24 @@ function createGame(opts) {
       const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
       const w = r.winner;
       if (!isHidden(w)) {
-        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, totalScore: 0, bestRoundScore: 0 };
         stats[w].won++;
         stats[w].tokensWon += r.pot || 0;
-        if (secret != null && r.winnerGuess != null) {
-          stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
+        const winnerDist = (secret != null && r.winnerGuess != null) ? Math.abs(r.winnerGuess - secret) : null;
+        if (winnerDist != null) {
+          stats[w].bestDist = Math.min(stats[w].bestDist, winnerDist);
         }
         const winGuessCount = r.rawGuessCounts ? (r.rawGuessCounts[w] || 1) : 1;
         stats[w].bestWinGuessCount = stats[w].bestWinGuessCount === null
           ? winGuessCount
           : Math.min(stats[w].bestWinGuessCount, winGuessCount);
+        const roundScore = computeRoundScore(difficulty, winGuessCount, true, winnerDist);
+        stats[w].totalScore += roundScore;
+        if (roundScore > stats[w].bestRoundScore) stats[w].bestRoundScore = roundScore;
       }
       for (const g of r.guesses) {
         if (isHidden(g.from)) continue;
-        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, totalScore: 0, bestRoundScore: 0 };
         if (secret != null) {
           stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
         }
@@ -525,4 +538,4 @@ function createGame(opts) {
   };
 }
 
-module.exports = { createGame, DIFFICULTIES };
+module.exports = { createGame, DIFFICULTIES, computeRoundScore };

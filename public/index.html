@@ -421,6 +421,15 @@
       animation: badge-in .5s cubic-bezier(.34,1.3,.64,1); box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 30%, transparent);
     }
     .next-round-label { font-size: .8rem; color: var(--text-muted); margin-top: 1.1rem; }
+    .result-score { font-size: 1.5rem; font-weight: 900; color: var(--accent-light); margin: .5rem 0 .15rem; font-variant-numeric: tabular-nums; }
+    .result-score-detail { font-size: .76rem; color: var(--text-muted); margin-bottom: .75rem; text-transform: uppercase; letter-spacing: .06em; }
+    .personal-best-banner {
+      display: inline-block; margin: .5rem 0 .75rem;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
+      color: #fff; font-weight: 800; font-size: .82rem; letter-spacing: .05em;
+      padding: .35rem .9rem; border-radius: 2rem;
+      animation: badge-in .4s ease; box-shadow: 0 4px 18px rgba(124,58,237,0.4);
+    }
     /* ---- Error card ---- */
     .error-card {
       padding: 1rem 1.1rem; margin-bottom: 1rem;
@@ -447,6 +456,8 @@
     .lb-best-win { text-align: right; flex-shrink: 0; }
     .lb-best-win span { display: block; font-size: .92rem; font-weight: 800; color: var(--accent-light); white-space: nowrap; font-variant-numeric: tabular-nums; }
     .lb-best-win small { display: block; font-size: .62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+    .lb-score { display: block; font-size: .92rem; font-weight: 800; color: #f59e0b; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .lb-score-label { display: block; font-size: .62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
     /* ---- History ---- */
     .hist-round {
       border: 1px solid var(--border); border-radius: var(--radius);
@@ -512,6 +523,7 @@
     .mg-outcome { font-size: .76rem; font-weight: 700; }
     .mg-outcome.win { color: var(--accent-light); }
     .mg-outcome.loss { color: var(--text-muted); }
+    .mg-score { font-size: .76rem; font-weight: 800; color: #f59e0b; margin-top: .2rem; font-variant-numeric: tabular-nums; }
     /* Expanded per-guess detail */
     .mg-detail {
       border-top: 1px solid var(--border); padding: .65rem .85rem .75rem;
@@ -888,6 +900,9 @@
       <div class="result-label">Secret Number</div>
       <div class="result-winner" id="result-winner"></div>
       <div class="result-mine" id="result-mine"></div>
+      <div id="result-score" class="result-score" style="display:none"></div>
+      <div id="result-score-detail" class="result-score-detail" style="display:none"></div>
+      <div id="personal-best-banner" class="personal-best-banner" style="display:none">⭐ New Personal Best!</div>
       <div class="next-round-label" id="next-round-label"></div>
     </div>
   </div>
@@ -2371,6 +2386,18 @@ function updateGuessCard(round, myGuesses, maxGuesses, allGuessesUsed) {
   }
 }
 
+const CLIENT_DIFFICULTIES = {
+  easy:   { maxGuesses: 5,  base: 100  },
+  medium: { maxGuesses: 10, base: 300  },
+  hard:   { maxGuesses: 15, base: 1000 },
+};
+function computeRoundScore(difficulty, numGuesses, won, bestDistance) {
+  if (!won) return 0;
+  const cfg = CLIENT_DIFFICULTIES[difficulty] || CLIENT_DIFFICULTIES.medium;
+  const score = cfg.base * Math.max(1, cfg.maxGuesses - numGuesses + 1);
+  return bestDistance === 0 ? score * 2 : score;
+}
+
 function renderResult(round, myGuesses) {
   const secret = round.secret;
   // Slot-machine reveal (reduced-motion → instant), re-render-safe.
@@ -2401,8 +2428,11 @@ function renderResult(round, myGuesses) {
     round.winner ? ('🏆 ' + escapeHtml(winnerName) + ' guessed ' + round.winnerGuess) : 'No winner this time — better luck next round!';
 
   const bestGuess = getMyBestGuess(round, myGuesses);
+  let earnedScore = 0;
+  let bestDist = null;
   if (bestGuess && secret != null) {
     const dist = Math.abs(bestGuess.guess - secret);
+    bestDist = dist;
     const isBullseye = dist === 0;
     const iWon = round.winner && round.winner === myAddress;
     document.getElementById('bullseye-badge').style.display = isBullseye ? '' : 'none';
@@ -2412,15 +2442,30 @@ function renderResult(round, myGuesses) {
     } else if (iWon) {
       mine = (myGuesses.length > 1 ? 'Your best guess was ' : 'Your guess was ') + bestGuess.guess + ' — just ' + dist + ' away. Closest of all! 🏆';
     } else {
-      // Warm, low-stakes framing for a non-winning round. Closer guesses get a
-      // little extra cheer.
       const lead = dist <= 3 ? 'So close! ' : dist <= 10 ? 'Nice try! ' : 'Good effort! ';
       mine = lead + (myGuesses.length > 1 ? 'Your best guess was ' : 'Your guess was ') + bestGuess.guess + ', just ' + dist + ' away. Jump into the next round!';
     }
     document.getElementById('result-mine').textContent = mine;
+    earnedScore = computeRoundScore(round.difficulty || 'medium', myGuesses.length, iWon, iWon ? dist : null);
   } else {
     document.getElementById('bullseye-badge').style.display = 'none';
     document.getElementById('result-mine').textContent = myGuesses.length > 0 ? '' : 'You sat this one out — hop into the next round!';
+  }
+
+  const scoreEl = document.getElementById('result-score');
+  const scoreDetailEl = document.getElementById('result-score-detail');
+  const pbBanner = document.getElementById('personal-best-banner');
+  if (earnedScore > 0) {
+    scoreEl.textContent = '+' + earnedScore.toLocaleString() + ' pts';
+    scoreEl.style.display = '';
+    scoreDetailEl.textContent = (round.difficulty || 'medium') + ' · ' + myGuesses.length + ' guess' + (myGuesses.length !== 1 ? 'es' : '') + (bestDist === 0 ? ' · bullseye ×2' : '');
+    scoreDetailEl.style.display = '';
+    const prevBest = myGamesData && myGamesData.stats ? (myGamesData.stats.bestRoundScore || 0) : 0;
+    pbBanner.style.display = earnedScore > prevBest ? '' : 'none';
+  } else {
+    scoreEl.style.display = 'none';
+    scoreDetailEl.style.display = 'none';
+    pbBanner.style.display = 'none';
   }
 
   const td = gameState.tracks && gameState.tracks[selectedTrack];
@@ -2468,7 +2513,7 @@ function renderLeaderboard() {
     // an auto-generated user_<last6> fallback row.
     .filter((e) => hasCustomName(e.pubkey))
     .sort((a, b) =>
-      a.bestWinGuessCount - b.bestWinGuessCount ||
+      (b.totalScore || 0) - (a.totalScore || 0) ||
       b.won - a.won ||
       b.tokensWon - a.tokensWon
     )
@@ -2487,15 +2532,16 @@ function renderLeaderboard() {
     const isMe = e.pubkey === myAddress;
     const bestWin = e.bestWinGuessCount === 1 ? '1 guess' : e.bestWinGuessCount + ' guesses';
     const best = e.bestDist != null ? e.bestDist + ' off' : '—';
+    const totalScore = e.totalScore || 0;
     const streak = streaks[e.pubkey] && streaks[e.pubkey].bestStreak > 0 ? streaks[e.pubkey].bestStreak : 0;
     const streakBadge = streak > 0 ? ' <span class="streak-badge">🔥' + streak + '</span>' : '';
     return '<div class="lb-row' + (isMe ? ' is-me' : '') + '">' +
       '<div class="lb-rank ' + rankClass + '">' + rank + '</div>' +
       '<div class="lb-info">' +
         '<div class="lb-name">' + escapeHtml(name) + (isMe ? ' <strong>(you)</strong>' : '') + '</div>' +
-        '<div class="lb-meta">' + e.won + ' win' + (e.won !== 1 ? 's' : '') + ' · ' + e.tokensWon + ' tokens · best: ' + best + streakBadge + '</div>' +
+        '<div class="lb-meta">' + e.won + ' win' + (e.won !== 1 ? 's' : '') + ' · ' + e.tokensWon + ' tokens · best: ' + bestWin + ' · ' + best + streakBadge + '</div>' +
       '</div>' +
-      '<div class="lb-best-win"><span>' + bestWin + '</span><small>best win</small></div>' +
+      '<div class="lb-best-win"><span class="lb-score">' + totalScore.toLocaleString() + '</span><span class="lb-score-label">total pts</span></div>' +
       '</div>';
   }).join('');
 }
@@ -2624,10 +2670,14 @@ function renderMyGames() {
 
   if (summary) {
     summary.style.display = '';
+    const totalScore = stats.totalScore || 0;
+    const bestRoundScore = stats.bestRoundScore || 0;
     summary.innerHTML =
       '<div class="mg-stat"><strong>' + stats.played + '</strong><small>games</small></div>' +
       '<div class="mg-stat"><strong>' + stats.wins + '</strong><small>wins</small></div>' +
-      '<div class="mg-stat"><strong>' + stats.winRate + '%</strong><small>win rate</small></div>';
+      '<div class="mg-stat"><strong>' + stats.winRate + '%</strong><small>win rate</small></div>' +
+      '<div class="mg-stat"><strong>' + totalScore.toLocaleString() + '</strong><small>total pts</small></div>' +
+      '<div class="mg-stat"><strong>' + bestRoundScore.toLocaleString() + '</strong><small>best round</small></div>';
   }
 
   const trackLabel = { '1h': '1H', '6h': '6H', '1d': '1D', '1w': '1W' };
@@ -2651,6 +2701,8 @@ function renderMyGames() {
       }
       outcomeHtml = '<span class="mg-outcome loss">Lost' + best + '</span>';
     }
+    const rowScore = r.score || 0;
+    const scoreHtml = rowScore > 0 ? '<div class="mg-score">+' + rowScore.toLocaleString() + ' pts</div>' : '';
 
     // Per-guess detail is opt-in: only rows that actually have guesses are
     // expandable. Older rows / DB-disabled edge cases collapse the caret to a
@@ -2690,7 +2742,7 @@ function renderMyGames() {
           '<div class="mg-round">Round ' + r.round_id + '</div>' +
           '<div class="mg-meta">' + escapeHtml(tags) + (tags ? ' · ' : '') + guesses + (date ? ' · ' + date : '') + '</div>' +
         '</div>' +
-        '<div class="mg-right">' + outcomeHtml + '</div>' +
+        '<div class="mg-right">' + outcomeHtml + scoreHtml + '</div>' +
       '</div>' +
       detailHtml +
     '</div>';
