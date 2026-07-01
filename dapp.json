@@ -215,6 +215,11 @@
       "expectSelector": "#guess-btn"
     },
     {
+      "name": "Multi-guess auto-guess CONFIRMS and populates the guess-history list (not stuck on Placing…)",
+      "path": "/?demo=1&demoAutoGuess=1&demoTrack=6h",
+      "expectText": "Guess 1"
+    },
+    {
       "name": "Leaderboard renders with only named Usernode players",
       "path": "/?demo=1",
       "expectSelector": "#leaderboard-list"
