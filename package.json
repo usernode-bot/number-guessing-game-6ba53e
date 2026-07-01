@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/my-history-union.test.js"
+    "test": "node test/my-history-union.test.js && node test/pending-guesses.test.js && node test/pending-guesses-db.test.js"
   },
   "dependencies": {
     "express": "^4.21.0",

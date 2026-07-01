@@ -40,7 +40,7 @@ shared understanding of what this app is for)_
   (`getMyStreaks` / `getTrackStreaks`). The chain remains the source of
   truth for live state — derive new gameplay state from chain data, not
   a table.
-- **There are three Postgres tables** (see `lib/db.js`), all **public**
+- **There are four Postgres tables** (see `lib/db.js`), all **public**
   (every field is already public on-chain) and all applied idempotently
   on boot via `db.initSchema()`:
   - **`game_results`** — a durable, per-user projection of each
@@ -61,6 +61,16 @@ shared understanding of what this app is for)_
     the player ever opens their history. `ON CONFLICT (tx_id) DO NOTHING`
     makes the cache's boot-time replay a safe, self-healing backfill, so
     the ledger can be processed and replayed from chain.
+  - **`pending_guesses`** — a short-lived, per-user cache of a player's
+    OPTIMISTIC (not-yet-confirmed) guesses, keyed to `req.user` with a
+    UNIQUE `(user_id, round_id, guess)`. It exists only so a page refresh
+    during the tap→on-chain-inclusion window can rehydrate the dimmed
+    "placing…" row instead of losing it (`POST /api/pending-guess` on
+    placement, `GET /api/pending-guesses` on boot, `DELETE
+    /api/pending-guess` on wallet-decline). It is a convenience cache, NOT
+    authoritative — confirmed state still derives from chain, and the GET
+    endpoint self-prunes rows that have landed on-chain, whose round
+    rolled/ended, or that aged out past ~10 min.
   `DATABASE_URL` is platform-injected; if it's absent every `db` function
   becomes a no-op and the history endpoint degrades to freshly-derived
   (unsaved) results rather than failing. Keep deriving *gameplay* state

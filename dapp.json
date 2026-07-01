@@ -45,6 +45,11 @@
       "expectSelector": "#guess-btn"
     },
     {
+      "name": "Demo mode rehydrates in-flight guesses on load (pending-guess persistence)",
+      "path": "/?demo=1",
+      "expectSelector": "#my-guesses-list"
+    },
+    {
       "name": "Place Guess button is present on the Game tab",
       "path": "/",
       "expectSelector": "#guess-btn"
