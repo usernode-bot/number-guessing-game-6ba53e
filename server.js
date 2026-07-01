@@ -81,6 +81,13 @@ const STAGING_DEMO_USER = { id: 'staging-demo-user', username: 'alice_s', userno
 // `from === myAddress`, so a staging guess ingested under this `from` is what
 // the demo client recognises as its own. Staging-only; never used in prod.
 const STAGING_DEMO_ADDR = 'utpk1demoplayer0000000000000000000000000000000000000000demo01';
+// A second fake wallet whose pubkey is DELIBERATELY different from the demo
+// account's JWT pubkey (STAGING_DEMO_USER.usernode_pubkey). The seeded
+// STAGING_DEMO_MISMATCH_ROUND below is signed by this wallet, so it is findable
+// ONLY via the wallet/JWT union read-back — exercising the My Games identity fix
+// in staging. Staging-only; never used in prod.
+const STAGING_DEMO_MISMATCH_WALLET = 'utpk1stagingwalletmismatch00000000000000000000000000000000m1';
+const STAGING_DEMO_MISMATCH_ROUND = 90001;
 const STAGING_DEMO_RESULTS = (() => {
   const now = Date.now();
   const hour = 3600000;
@@ -243,6 +250,64 @@ function attachGuesses(results, byRound) {
     r.guesses = (byRound && byRound.get(r.round_id)) || [];
   }
   return results;
+}
+
+// A guess tx is signed by the player's wallet (getNodeAddress on the client),
+// whose pubkey is NOT guaranteed to equal req.user.usernode_pubkey (the JWT
+// account pubkey) — different linkage / formats. So My Games must read back
+// against BOTH identities. validateWalletPubkey() sanitises a client-supplied
+// wallet hint: it only ever selects which on-chain `from_pubkey` to derive from
+// (all guess data is already public), never grants any write. Loose pubkey shape,
+// hard length cap to bound the union loop.
+function validateWalletPubkey(raw) {
+  if (typeof raw !== 'string') return null;
+  const w = raw.trim();
+  if (!w || w.length > 128) return null;
+  if (!/^[A-Za-z0-9_]+$/.test(w)) return null;
+  return w;
+}
+
+// Derive a player's finished-round results from the UNION of several pubkeys
+// (JWT account pubkey + signing wallet), deduped by round_id so an identity that
+// matches both can't double-count. Same shape/sort as collectUserResults.
+function deriveUnionResults(pubkeys) {
+  const byRound = new Map();
+  for (const pk of pubkeys) {
+    if (!pk) continue;
+    for (const r of collectUserResults(pk)) {
+      if (!byRound.has(r.round_id)) byRound.set(r.round_id, r);
+    }
+  }
+  const out = Array.from(byRound.values());
+  out.sort((a, b) => (b.ended_at || 0) - (a.ended_at || 0) || b.round_id - a.round_id);
+  return out;
+}
+
+// Per-guess companion to deriveUnionResults: union across pubkeys, deduped by
+// round + guess_index + value so the same guess seen under two identities lands once.
+function deriveUnionGuesses(pubkeys) {
+  const byKey = new Map();
+  for (const pk of pubkeys) {
+    if (!pk) continue;
+    for (const g of collectUserGuesses(pk)) {
+      const key = g.round_id + ':' + g.guess_index + ':' + g.guess;
+      if (!byKey.has(key)) byKey.set(key, g);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
+// The distinct, valid pubkeys a request's history should be derived from: the
+// signed-in account pubkey plus an optional, validated signing-wallet hint.
+function historyPubkeys(req) {
+  const out = [];
+  const jwtPk = req.user && req.user.usernode_pubkey;
+  if (jwtPk) out.push(jwtPk);
+  const wallet = validateWalletPubkey(
+    (req.query && req.query.wallet) || req.headers['x-usernode-wallet']
+  );
+  if (wallet && !out.includes(wallet)) out.push(wallet);
+  return out;
 }
 
 function computeHistoryStats(results) {
@@ -860,6 +925,19 @@ function injectStagingSeeds() {
     // (guessLanded) could never confirm them. Distinct from the demo ACCOUNT
     // badge (alice_s / p1, surfaced by /api/me?demo=1).
     { id: 'staging-u-demo', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: STAGING_DEMO_ADDR, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'you_demo' }), timestamp_ms: now - 3 * day },
+    // The mismatch wallet needs a username too, or isHiddenFromPublic would filter
+    // its guesses out of chain-derived state (named-players-only).
+    { id: 'staging-u-mismatch', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: STAGING_DEMO_MISMATCH_WALLET, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s_wallet' }), timestamp_ms: now - 2 * day },
+
+    // ---- Staging demo: wallet/JWT identity-mismatch read-back round ----
+    // A finished 1d round whose guesses are signed by STAGING_DEMO_MISMATCH_WALLET,
+    // which differs from the demo account's JWT pubkey. It is therefore findable
+    // ONLY through the wallet/JWT union in /api/my-history — surfaced to the demo
+    // My Games via ?demo=1 to prove the fix end to end. Obviously fake (round 90001).
+    { id: 'staging-mismatch-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: STAGING_DEMO_MISMATCH_ROUND, seed_hash: '00000059' + 'a'.repeat(56), active_duration_ms: 86400000, min_players: MIN_PLAYERS, max_guesses_per_player: 5, mode: 'normal', duration_track: '1d', difficulty: 'medium' }), timestamp_ms: now - 2 * day - 1000 },
+    { id: 'staging-mismatch-g1', to: APP_PUBKEY, from_pubkey: STAGING_DEMO_MISMATCH_WALLET, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: STAGING_DEMO_MISMATCH_ROUND, guess: 80 }), timestamp_ms: now - 2 * day + 100 },
+    { id: 'staging-mismatch-g2', to: APP_PUBKEY, from_pubkey: STAGING_DEMO_MISMATCH_WALLET, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: STAGING_DEMO_MISMATCH_ROUND, guess: 90 }), timestamp_ms: now - 2 * day + 200 },
+    { id: 'staging-mismatch-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: STAGING_DEMO_MISMATCH_ROUND, secret: 90, winner: STAGING_DEMO_MISMATCH_WALLET, winner_guess: 90, pot: 2, participants: 1 }), timestamp_ms: now - day - 1000 },
   ];
 
   // Route each seed tx to the right cache: numguess txs drive the game state,
@@ -1200,6 +1278,20 @@ app.get('/api/my-history', async (req, res) => {
   if (IS_STAGING && req.query.demo === '1') {
     const demoResults = STAGING_DEMO_RESULTS.map((r) => ({ ...r }));
     attachGuesses(demoResults, groupGuessesByRound(STAGING_DEMO_GUESSES));
+
+    // Demonstrate the wallet/JWT union read-back: derive the demo account pubkey
+    // UNIONED with the mismatch wallet, then surface the seeded mismatch round
+    // (round 90001, signed by STAGING_DEMO_MISMATCH_WALLET ≠ the demo account
+    // pubkey) at the top of My Games. It is findable ONLY because of the wallet
+    // arm of the union — exactly the production fix, exercised in staging.
+    const unionKeys = [STAGING_DEMO_USER.usernode_pubkey, STAGING_DEMO_MISMATCH_WALLET];
+    const unionResults = deriveUnionResults(unionKeys);
+    attachGuesses(unionResults, groupGuessesByRound(deriveUnionGuesses(unionKeys)));
+    const mismatch = unionResults.find((r) => r.round_id === STAGING_DEMO_MISMATCH_ROUND);
+    if (mismatch && !demoResults.some((r) => r.round_id === mismatch.round_id)) {
+      demoResults.unshift(mismatch);
+    }
+
     return res.json({
       results: demoResults,
       stats: computeHistoryStats(demoResults),
@@ -1207,14 +1299,18 @@ app.get('/api/my-history', async (req, res) => {
     });
   }
 
-  const pubkey = req.user && req.user.usernode_pubkey;
-  if (!pubkey) {
-    // Signed in but no linked wallet → no on-chain guesses to match.
+  // Read back against BOTH the JWT account pubkey AND the validated signing-wallet
+  // hint the client forwards (?wallet= / x-usernode-wallet). Guesses are signed by
+  // the wallet, which may not equal the account pubkey — without the union a player
+  // whose two identities differ sees an empty My Games despite real on-chain play.
+  const pubkeys = historyPubkeys(req);
+  if (!pubkeys.length) {
+    // Signed in but no linked wallet and no wallet hint → no on-chain guesses to match.
     return res.json({ results: [], stats: { played: 0, wins: 0, winRate: 0 } });
   }
 
-  const derived = collectUserResults(pubkey);
-  const derivedGuesses = collectUserGuesses(pubkey);
+  const derived = deriveUnionResults(pubkeys);
+  const derivedGuesses = deriveUnionGuesses(pubkeys);
 
   // Diagnostic: if the player has a linked wallet but zero finished rounds match,
   // while the game already has completed rounds with guesses, log once. This surfaces
@@ -1225,7 +1321,7 @@ app.get('/api/my-history', async (req, res) => {
       if (r.endedAt && r.guesses.length) { hasFinishedGuess = true; break; }
     }
     if (hasFinishedGuess) {
-      console.warn(`[my-history] pubkey ${pubkey.slice(0, 16)}… matched 0 finished rounds despite completed rounds existing — possible wallet/JWT pubkey mismatch (user: ${req.user.id})`);
+      console.warn(`[my-history] identities [${pubkeys.map((p) => p.slice(0, 12) + '…').join(', ')}] matched 0 finished rounds despite completed rounds existing — possible wallet/JWT pubkey mismatch (user: ${req.user.id})`);
       derivedMismatchWarned = true;
     }
   }
@@ -1558,4 +1654,27 @@ async function start() {
   app.listen(port, () => console.log(`Number Guessing Game listening on :${port}`));
 }
 
-start().catch((err) => { console.error(err); process.exit(1); });
+// Only boot the server (listen + intervals + on-chain side effects) when run
+// directly. When required as a module — e.g. by test/my-history-union.test.js —
+// the routes and helpers are wired up but nothing listens or polls, so unit
+// tests can inject seed txs and call the derivation helpers in isolation.
+if (require.main === module) {
+  start().catch((err) => { console.error(err); process.exit(1); });
+}
+
+module.exports = {
+  app,
+  game,
+  numguessCache,
+  usernamesCache,
+  injectStagingSeeds,
+  collectUserResults,
+  collectUserGuesses,
+  deriveUnionResults,
+  deriveUnionGuesses,
+  validateWalletPubkey,
+  historyPubkeys,
+  STAGING_DEMO_USER,
+  STAGING_DEMO_MISMATCH_WALLET,
+  STAGING_DEMO_MISMATCH_ROUND,
+};
