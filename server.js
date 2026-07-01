@@ -1352,6 +1352,142 @@ app.get('/api/my-history', async (req, res) => {
   res.json({ results, stats: computeHistoryStats(results) });
 });
 
+// ---------------------------------------------------------------------------
+// Pending (optimistic) guess persistence — see the spec "Persist in-flight
+// guesses so they survive a page refresh". Confirmed gameplay state derives
+// from chain and already survives a refresh; only the short-lived in-flight
+// guess (tapped but not yet on-chain) lived exclusively in browser memory. We
+// cache it per-user so init() can rehydrate the dimmed "placing…" row. This is
+// a convenience cache, NOT authoritative state — losing it just reverts to the
+// old behaviour, so every branch degrades to a harmless success/empty response.
+// ---------------------------------------------------------------------------
+
+// Match the client's PENDING_MAX_AGE_MS (public/index.html) so an in-flight
+// guess that never landed stops being rehydrated after ~10 minutes.
+const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
+
+// Resolve the LIVE round a pending guess belongs to, or null if it no longer
+// applies (round unknown, ended, or superseded by a newer round on its track).
+function liveRoundForPending(roundId) {
+  const round = game.rounds.get(roundId);
+  if (!round || round.endedAt) return null;
+  const current = game.getCurrentRoundForTrack(round.durationTrack);
+  if (!current || current.id !== roundId) return null;
+  return round;
+}
+
+// Record an optimistic guess the instant the player commits it, so a refresh
+// during the on-chain-inclusion window can restore it. Fire-and-forget from the
+// client. Round/guess are validated against live state; track/difficulty are
+// taken from the round itself rather than trusting the body.
+app.post('/api/pending-guess', async (req, res) => {
+  const body = req.body || {};
+  const roundId = parseInt(body.round, 10);
+  const guess = parseInt(body.guess, 10);
+  if (!Number.isFinite(roundId) || !Number.isFinite(guess)) {
+    return res.status(400).json({ error: 'round and guess are required' });
+  }
+  const round = liveRoundForPending(roundId);
+  if (!round) return res.status(409).json({ error: 'round is not active' });
+  const range = round.range || 100;
+  if (guess < 1 || guess > range) {
+    return res.status(400).json({ error: `guess must be between 1 and ${range}` });
+  }
+  if (db.isEnabled()) {
+    try {
+      await db.upsertPendingGuess(req.user, {
+        round_id: roundId,
+        track: round.durationTrack || null,
+        difficulty: round.difficulty || null,
+        guess,
+      });
+    } catch (e) {
+      // Non-fatal: the guess still goes on-chain; only the refresh-safety cache
+      // failed. Degrade to today's behaviour rather than erroring the placement.
+      if (!dbWarned) {
+        console.error('[pending-guess] DB unavailable, not caching:', e.message);
+        dbWarned = true;
+      }
+    }
+  }
+  res.json({ ok: true });
+});
+
+// Return the player's still-open pending guesses for rehydration on page load,
+// filtered server-side and lazily self-pruning: drop any whose round rolled /
+// ended, that have already landed on-chain (by the wallet/JWT pubkey union), or
+// that have aged out past PENDING_MAX_AGE_MS.
+app.get('/api/pending-guesses', async (req, res) => {
+  // Staging-only demo injection: surface one obviously-fake pending guess for
+  // the live 1h round so a reviewer loading ?demo=1 can refresh and watch the
+  // dimmed "placing…" row reappear. Never persists; strict no-op in production.
+  if (IS_STAGING && req.query.demo === '1') {
+    const demoRound = game.getCurrentRoundForTrack('1h');
+    const pending = (demoRound && !demoRound.endedAt)
+      ? [{ roundId: demoRound.id, track: demoRound.durationTrack || '1h', guess: 88 }]
+      : [];
+    return res.json({ pending, demo: true });
+  }
+
+  if (!db.isEnabled()) return res.json({ pending: [] });
+
+  let rows;
+  try {
+    rows = await db.getPendingGuessesForUser(req.user.id);
+  } catch (e) {
+    if (!dbWarned) {
+      console.error('[pending-guesses] DB unavailable, serving empty:', e.message);
+      dbWarned = true;
+    }
+    return res.json({ pending: [] });
+  }
+  if (!rows || !rows.length) return res.json({ pending: [] });
+
+  const pubkeys = historyPubkeys(req);
+  const now = Date.now();
+  const out = [];
+  for (const row of rows) {
+    let keep = false;
+    const round = liveRoundForPending(row.roundId);
+    if (round) {
+      const aged = row.placedAt != null && (now - row.placedAt) > PENDING_MAX_AGE_MS;
+      const landed = Array.isArray(round.guesses) && round.guesses.some(
+        (g) => g && g.guess === row.guess && pubkeys.includes(g.from)
+      );
+      keep = !aged && !landed;
+    }
+    if (keep) {
+      out.push({ roundId: row.roundId, track: row.track, guess: row.guess });
+    } else {
+      // Lazy prune — self-healing, mirrors the guess_ledger replay style.
+      db.deletePendingGuess(req.user.id, row.roundId, row.guess).catch(() => {});
+    }
+  }
+  res.json({ pending: out });
+});
+
+// Clear a pending guess the client knows will never land — the player declined
+// the wallet approval, or it failed before dispatch — so it isn't rehydrated.
+app.delete('/api/pending-guess', async (req, res) => {
+  const body = req.body || {};
+  const roundId = parseInt(body.round, 10);
+  const guess = parseInt(body.guess, 10);
+  if (!Number.isFinite(roundId) || !Number.isFinite(guess)) {
+    return res.status(400).json({ error: 'round and guess are required' });
+  }
+  if (db.isEnabled()) {
+    try {
+      await db.deletePendingGuess(req.user.id, roundId, guess);
+    } catch (e) {
+      if (!dbWarned) {
+        console.error('[pending-guess DELETE] DB unavailable:', e.message);
+        dbWarned = true;
+      }
+    }
+  }
+  res.json({ ok: true });
+});
+
 // Signed-in Usernode account identity, surfaced to the header badge. Under
 // /api/ so the deny-by-default middleware 401s without a valid token (NOT in
 // PUBLIC_API_PATHS) — the frontend treats that as "no identity" and hides the

@@ -1842,6 +1842,55 @@ async function postStagingGuess(roundId, guess) {
   }
 }
 
+// ---- Pending-guess persistence (survives a page refresh) ----
+// Save/clear/restore the player's OPTIMISTIC (not-yet-confirmed) guesses on the
+// server so a refresh during the on-chain-inclusion window rehydrates the dimmed
+// "placing…" row instead of losing it. All soft-failing: the guess still goes
+// on-chain regardless, this only powers refresh-safety. Skipped in DEMO (no real
+// identity round-trip; the staging mock ledger + GET ?demo=1 seed cover that path).
+function persistPendingGuess(roundId, guess, track, difficulty) {
+  if (DEMO) return;
+  fetch('/api/pending-guess', {
+    method: 'POST',
+    signal: AbortSignal.timeout(10000),
+    headers: { 'content-type': 'application/json', 'x-usernode-token': window._ngToken || '' },
+    body: JSON.stringify({ round: roundId, guess: guess, track: track, difficulty: difficulty }),
+  }).catch((e) => console.warn('[persistPendingGuess] failed:', e && e.message ? e.message : e));
+}
+
+function clearPendingGuess(roundId, guess) {
+  if (DEMO) return;
+  fetch('/api/pending-guess', {
+    method: 'DELETE',
+    signal: AbortSignal.timeout(10000),
+    headers: { 'content-type': 'application/json', 'x-usernode-token': window._ngToken || '' },
+    body: JSON.stringify({ round: roundId, guess: guess }),
+  }).catch((e) => console.warn('[clearPendingGuess] failed:', e && e.message ? e.message : e));
+}
+
+// On boot, restore the player's still-open pending guesses into pendingGuesses so
+// the "My guesses this round" row, the counter, and the pot/players bump come
+// back exactly as before the refresh. The server has already filtered to guesses
+// whose round is still live, that haven't landed on-chain, and that haven't aged
+// out; reconcilePendingGuesses (on every render) drops any that no longer apply.
+async function rehydratePendingGuesses() {
+  if (!myAddress) return;
+  try {
+    const demo = DEMO ? '?demo=1' : '';
+    const headers = window._ngToken ? { 'x-usernode-token': window._ngToken } : {};
+    const res = await fetch('/api/pending-guesses' + demo, { cache: 'no-store', headers, signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return;
+    const data = await res.json();
+    const pending = (data && Array.isArray(data.pending)) ? data.pending : [];
+    for (const p of pending) {
+      if (p == null || p.roundId == null || p.guess == null) continue;
+      applyOptimisticGuess(p.roundId, p.guess); // idempotent by round + value
+    }
+  } catch (e) {
+    console.warn('[rehydratePendingGuesses] failed:', e && e.message ? e.message : e);
+  }
+}
+
 // ---- Guess action ----
 async function placeGuess() {
   // Never silently swallow a tap. If a previous send is genuinely still in
@@ -1912,6 +1961,9 @@ async function placeGuess() {
     pendingEntry.ts = Date.now();
     pendingEntry.status = 'pending';
   }
+  // Persist the optimistic guess server-side so a refresh during the inclusion
+  // window can rehydrate this row. Fire-and-forget; never blocks the placement.
+  persistPendingGuess(round.id, guess, selectedTrack, round.difficulty);
   render();
 
   console.log('[placeGuess] opening bridge approval for guess', { round: round.id, guess, to: appPubkey });
@@ -1971,14 +2023,17 @@ async function placeGuess() {
       reconcileGuessInBackground(round.id, guess);
     } else if (low.includes('declin') || low.includes('reject') || low.includes('cancel') || low.includes('denied')) {
       // Wallet declined → the guess was never sent. Drop the optimistic row and
-      // reset the button so the counters/pot snap back.
+      // reset the button so the counters/pot snap back. Also clear the persisted
+      // copy so a refresh doesn't rehydrate a guess that was never placed.
       removePendingGuess(pendingEntry);
+      clearPendingGuess(round.id, guess);
       setSending(false);
       setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
       showError('No problem — your guess wasn\'t placed. Try again whenever you\'re ready. 🍀');
     } else {
       // Genuine failure before dispatch → drop the optimistic row and reset.
       removePendingGuess(pendingEntry);
+      clearPendingGuess(round.id, guess);
       setSending(false);
       setBtnState(guessBtn, 'idle', 'Place Guess — 1 token');
       showError('Hmm, that guess didn\'t go through. Give it another try in a moment.');
@@ -2854,6 +2909,13 @@ async function init() {
     applyAuthUI();
 
     await refreshState();
+
+    // Restore any in-flight guesses saved before a refresh, then re-render so
+    // the dimmed "placing…" row / counter / pot bump come back. After the first
+    // state fetch so reconcilePendingGuesses can immediately drop any that
+    // already landed or whose round rolled while the player was away.
+    await rehydratePendingGuesses();
+    if (gameState) render();
 
   } catch (e) {
     showError('Bridge unavailable: ' + (e.message || e));
