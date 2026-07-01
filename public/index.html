@@ -1392,11 +1392,19 @@ function maybeActivateDemo() {
   // Re-fetch account badge now that DEMO is active so it shows the demo identity
   // (alice_s) rather than the real account that was resolved at init time.
   loadAccount();
-  if (!loggedIn) {
-    attemptSignIn().then((ok) => {
-      if (ok) { applyAuthUI(); if (gameState) render(); }
-    });
-  }
+  // ALWAYS (re-)establish the demo identity, even if a non-demo sign-in already
+  // succeeded at init. The init-time attemptSignIn() runs before staging is
+  // confirmed, so it takes the REAL branch and can set myAddress to the wallet
+  // the bridge's getNodeAddress() returns (JWT-derived), flipping loggedIn true.
+  // If we only signed in "when !loggedIn" here, myAddress would keep that real
+  // address — but the staging server attributes every demo guess to DEMO_ADDR
+  // (STAGING_DEMO_ADDR). guessLanded() keys on `from === myAddress`, so a demo
+  // guess would then NEVER match and the "My guesses this round" row would hang
+  // on "Placing…" forever, never confirming. Re-running attemptSignIn() with
+  // DEMO=true overwrites myAddress with DEMO_ADDR so confirmation reconciles.
+  attemptSignIn().then((ok) => {
+    if (ok) { applyAuthUI(); if (gameState) render(); }
+  });
 }
 
 // ---- Auth / login gate ----
@@ -2890,6 +2898,13 @@ async function init() {
   // the headless proposal checks, which navigate but never click. No-op unless
   // demo mode actually activates (staging) and an active round is present.
   const wantDemoAutoGuess = params.get('demoAutoGuess') === '1';
+  // Staging/demo-only: ?demoTrack=<1h|6h|1d|1w> preselects a track before the
+  // auto-guess fires, so a proposal check can target a MULTI-guess round (e.g.
+  // 6h) and assert the placed guess actually CONFIRMS ("Guess 1") rather than
+  // hanging on "Placing…". The default 1d track lands on a single-guess round
+  // whose locked badge shows from the optimistic row alone, which would mask a
+  // broken confirmation. No-op unless demo mode activates.
+  const demoTrack = params.get('demoTrack');
 
   try {
     // No client-side chain bootstrap needed: the hosted bridge discovers the
@@ -2932,9 +2947,16 @@ async function init() {
     // reconciliation recovery, which should still end at "locked in".
     let tries = 0;
     const tick = () => {
-      if (DEMO && loggedIn && getActiveRound() && !getActiveRound().endedAt) {
-        placeGuess();
-        return;
+      if (DEMO && loggedIn) {
+        // Preselect the requested track (if valid) once demo is live, so the
+        // auto-guess targets that track's current round.
+        if (demoTrack && TRACKS.includes(demoTrack) && selectedTrack !== demoTrack) {
+          setGameTrack(demoTrack);
+        }
+        if (getActiveRound() && !getActiveRound().endedAt) {
+          placeGuess();
+          return;
+        }
       }
       if (++tries < 40) setTimeout(tick, 250);
     };

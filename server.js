@@ -1811,6 +1811,7 @@ module.exports = {
   validateWalletPubkey,
   historyPubkeys,
   STAGING_DEMO_USER,
+  STAGING_DEMO_ADDR,
   STAGING_DEMO_MISMATCH_WALLET,
   STAGING_DEMO_MISMATCH_ROUND,
 };
