@@ -23,7 +23,7 @@ loadEnvFile();
 
 const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
-const JWT_SECRET = process.env.JWT_SECRET;
+const USERNODE_JWT_PUBLIC_KEY = process.env.USERNODE_JWT_PUBLIC_KEY;
 
 const APP_PUBKEY = process.env.APP_PUBKEY || 'utpk1rn7sakz2nvk2uzlvf4spzl22374z9u0jvah8yqs0djc722u96uqs20yx79';
 const APP_SECRET_KEY = process.env.APP_SECRET_KEY || '';
@@ -339,17 +339,27 @@ app.use((req, res, next) => {
   // Coarse reason the credential didn't resolve, consumed by the shell gate
   // page and by gated 401 responses. Never logs the raw token.
   //   'missing'  — no token supplied (likely opened outside Usernode)
-  //   'no_secret'— JWT_SECRET not configured on the server (misconfiguration)
+  //   'no_secret'— USERNODE_JWT_PUBLIC_KEY not configured on the server (misconfiguration)
   //   'expired'  — token present but past its exp
   //   'invalid'  — token present but signature/format rejected
   if (!token) {
     req.authError = 'missing';
-  } else if (!JWT_SECRET) {
+  } else if (!USERNODE_JWT_PUBLIC_KEY) {
     req.authError = 'no_secret';
-    console.error('[auth] token present but JWT_SECRET is not configured — cannot verify sessions');
+    console.error('[auth] token present but USERNODE_JWT_PUBLIC_KEY is not configured — cannot verify sessions');
   } else {
     try {
-      req.user = jwt.verify(token, JWT_SECRET);
+      const payload = jwt.verify(token, USERNODE_JWT_PUBLIC_KEY, {
+        algorithms: ['RS256'],
+        issuer: 'usernode',
+        audience: 'usernode:app:' + process.env.USERNODE_APP_ID,
+      });
+      if (payload.pur === 'iframe') {
+        req.user = payload;
+      } else {
+        req.authError = 'invalid';
+        console.warn('[auth] token verification failed: unexpected pur claim');
+      }
     } catch (err) {
       req.authError = err && err.name === 'TokenExpiredError' ? 'expired' : 'invalid';
       console.warn(`[auth] token verification failed: ${req.authError} (${err && err.name})`);
@@ -1691,16 +1701,16 @@ app.get('*', (req, res) => {
 // ---------------------------------------------------------------------------
 
 async function start() {
-  // Fail loud if the session-signing secret is missing. Without it the auth
-  // middleware can never set req.user, so every shell load hits the gate page
-  // and login is totally broken. In staging/build the secret is platform-
+  // Fail loud if the session-verification public key is missing. Without it the
+  // auth middleware can never set req.user, so every shell load hits the gate
+  // page and login is totally broken. In staging/build the key is platform-
   // injected and absent in PR previews, so only warn there; in production a
-  // missing secret is a hard misconfiguration.
-  if (!JWT_SECRET) {
+  // missing key is a hard misconfiguration.
+  if (!USERNODE_JWT_PUBLIC_KEY) {
     if (IS_STAGING) {
-      console.warn('[boot] JWT_SECRET is not set — auth will reject all sessions. Expected in some staging/preview builds.');
+      console.warn('[boot] USERNODE_JWT_PUBLIC_KEY is not set — auth will reject all sessions. Expected in some staging/preview builds.');
     } else {
-      console.error('[boot] FATAL: JWT_SECRET is not set in production — login is broken until it is configured. All sessions will be rejected.');
+      console.error('[boot] FATAL: USERNODE_JWT_PUBLIC_KEY is not set in production — login is broken until it is configured. All sessions will be rejected.');
     }
   }
 
