@@ -19,6 +19,11 @@ const { createGame, DIFFICULTIES, computeRoundScore } = require('./game-logic');
 const db = require('./lib/db');
 const hidden = require('./lib/hidden-users');
 
+// The platform's address, injected by the platform at deploy (#2047). Never
+// written out here: a hardcoded hostname is what broke this app when the
+// platform moved domains. Empty only outside the platform (local runs).
+const PLATFORM_ORIGIN = (process.env.USERNODE_PLATFORM_ORIGIN || '').replace(/\/+$/, '');
+
 loadEnvFile();
 
 const app = express();
@@ -1688,7 +1693,7 @@ app.get('*', (req, res) => {
   <div style="max-width:24rem;padding:2rem;text-align:center">
     <h1 style="font-size:1.25rem;margin:0 0 0.5rem">${heading}</h1>
     <p style="color:#a1a1aa;font-size:0.9rem;margin:0 0 1.25rem">${body}</p>
-    <a href="https://social-vibecoding.usernodelabs.org" style="display:inline-block;padding:0.5rem 1rem;background:#7c3aed;color:white;border-radius:0.5rem;text-decoration:none;font-size:0.9rem">${cta}</a>
+    <a href="${PLATFORM_ORIGIN}" style="display:inline-block;padding:0.5rem 1rem;background:#7c3aed;color:white;border-radius:0.5rem;text-decoration:none;font-size:0.9rem">${cta}</a>
   </div>
 </body>`);
   }
