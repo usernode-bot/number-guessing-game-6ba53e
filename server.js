@@ -15,7 +15,7 @@ const {
   discoverChainInfo,
   EXPLORER_PROXY_PREFIX,
 } = require('./lib/dapp-server');
-const { createGame, DIFFICULTIES, computeRoundScore } = require('./game-logic');
+const { createGame, DIFFICULTIES, computeRoundScore, streakTierFor } = require('./game-logic');
 const db = require('./lib/db');
 const hidden = require('./lib/hidden-users');
 
@@ -38,19 +38,24 @@ const ROUND_TIMED_MS = parseInt(process.env.ROUND_TIMED_MS || '60000', 10);
 const MIN_PLAYERS = parseInt(process.env.MIN_PLAYERS || '2', 10);
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 
-const TRACKS = ['1h', '6h', '1d', '1w'];
+const TRACKS = ['1h', '6h', '1d', '1w', 'streak'];
 const TRACK_DURATIONS = {
   '1h': 3600000,
   '6h': 21600000,
   '1d': TIMER_DURATION_MS,
   '1w': 604800000,
+  // Streak mode: short back-to-back rounds so streaks move at a game-night
+  // pace. Difficulty comes from the ladder (streakTierFor), not the mode picker.
+  streak: 900000,
 };
 
-// Per-track pending difficulty for next round (resets to 'medium' after each round starts)
-const pendingDifficulty = { '1h': 'medium', '6h': 'medium', '1d': 'medium', '1w': 'medium' };
+// Per-track pending difficulty for next round (resets to 'medium' after each round starts).
+// Never consulted for 'streak' — that track's difficulty is derived from the
+// champion streak in postStartRound.
+const pendingDifficulty = { '1h': 'medium', '6h': 'medium', '1d': 'medium', '1w': 'medium', streak: 'medium' };
 
 // Per-track payout guards
-const inFlightPayout = { '1h': false, '6h': false, '1d': false, '1w': false };
+const inFlightPayout = { '1h': false, '6h': false, '1d': false, '1w': false, streak: false };
 
 // ---------------------------------------------------------------------------
 // Per-user game history (Postgres-backed)
@@ -170,7 +175,11 @@ function collectUserResults(pubkey) {
     const won = r.winner === pubkey;
     const outcome = won ? 'won' : (r.winner ? 'lost' : 'no_winner');
     const numGuesses = r.rawGuessCounts ? (r.rawGuessCounts[pubkey] || mine.length) : mine.length;
-    const score = computeRoundScore(r.difficulty || 'medium', numGuesses, won, won ? bestDist : null);
+    // Pass the round's actual guess budget: streak tiers (Blazing/Inferno)
+    // tighten maxGuessesPerPlayer below the difficulty key's own value, so the
+    // score multiplier must use the round's real budget. Identical for classic
+    // rounds, so historical scores are unchanged.
+    const score = computeRoundScore(r.difficulty || 'medium', numGuesses, won, won ? bestDist : null, r.maxGuessesPerPlayer);
 
     out.push({
       round_id: r.id,
@@ -918,6 +927,52 @@ function injectStagingSeeds() {
     { id: 'staging-r35-g4', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 35, guess: 50 }), timestamp_ms: now - 10 * day + 4 * hour },
     { id: 'staging-r35-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 35, secret: 50, winner: p2, winner_guess: 50, pot: 4, participants: 3 }), timestamp_ms: now - 3 * day },
 
+    // ---- STREAK MODE ----
+    // Three deterministic streak-track rounds. 80 and 81 ended with alice_s
+    // (p1) winning both → her streak-track currentStreak folds to 2, which is
+    // what puts the ladder at tier 1 for the active round 82 ("On a roll":
+    // hard 1–1000, 15 guesses). p2/p3 guessed and lost in 81, demonstrating the
+    // reset-on-loss rule. Round 82 is ACTIVE with no end_round so the streak
+    // track has a live round on boot; the boot auto-start skips creating
+    // another one for the track. Timing: 80 spans now-75m→now-60m, 81 spans
+    // now-55m→now-40m, 82 started now-5m with ~10m left (after it expires the
+    // 5s checkTrack concludes it winnerless and starts a fresh tier-1 round —
+    // alice_s's streak of 2 keeps the ladder at "On a roll").
+    // Tier 0 rounds use medium (1–100, 10 guesses); the tier-1 round uses hard
+    // (1–1000, 15 guesses) with streak_tier/streak_tier_name stamped in the
+    // memo exactly as postStartRound does for live rounds.
+    // Round 80 — streak — tier 0 — secret 42 (0x29%100+1) — alice_s wins on her 6th guess
+    { id: 'staging-s80-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 80, seed_hash: '00000029' + '8'.repeat(56), active_duration_ms: 900000, min_players: 1, max_guesses_per_player: 10, mode: 'normal', duration_track: 'streak', difficulty: 'medium', streak_tier: 0, streak_tier_name: 'Warming up' }), timestamp_ms: now - 75 * 60000 },
+    { id: 'staging-s80-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 80, guess: 50 }), timestamp_ms: now - 74 * 60000 },
+    { id: 'staging-s80-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 80, guess: 55 }), timestamp_ms: now - 73 * 60000 },
+    { id: 'staging-s80-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 80, guess: 60 }), timestamp_ms: now - 72 * 60000 },
+    { id: 'staging-s80-g4', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 80, guess: 30 }), timestamp_ms: now - 71 * 60000 },
+    { id: 'staging-s80-g5', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 80, guess: 45 }), timestamp_ms: now - 70 * 60000 },
+    { id: 'staging-s80-g6', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 80, guess: 35 }), timestamp_ms: now - 69 * 60000 },
+    { id: 'staging-s80-g7', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 80, guess: 40 }), timestamp_ms: now - 68 * 60000 },
+    { id: 'staging-s80-g8', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 80, guess: 42 }), timestamp_ms: now - 67 * 60000 },
+    { id: 'staging-s80-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 80, secret: 42, winner: p1, winner_guess: 42, pot: 8, participants: 3 }), timestamp_ms: now - 60 * 60000 },
+
+    // Round 81 — streak — tier 0 — secret 75 (0x4a%100+1) — alice_s wins again (streak → 2);
+    // p2/p3 guess and lose → their streaks reset to 0.
+    { id: 'staging-s81-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 81, seed_hash: '0000004a' + '7'.repeat(56), active_duration_ms: 900000, min_players: 1, max_guesses_per_player: 10, mode: 'normal', duration_track: 'streak', difficulty: 'medium', streak_tier: 0, streak_tier_name: 'Warming up' }), timestamp_ms: now - 55 * 60000 },
+    { id: 'staging-s81-g1', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 81, guess: 50 }), timestamp_ms: now - 54 * 60000 },
+    { id: 'staging-s81-g2', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 81, guess: 20 }), timestamp_ms: now - 53 * 60000 },
+    { id: 'staging-s81-g3', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 81, guess: 30 }), timestamp_ms: now - 52 * 60000 },
+    { id: 'staging-s81-g4', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 81, guess: 90 }), timestamp_ms: now - 51 * 60000 },
+    { id: 'staging-s81-g5', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 81, guess: 70 }), timestamp_ms: now - 50 * 60000 },
+    { id: 'staging-s81-g6', to: APP_PUBKEY, from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 81, guess: 75 }), timestamp_ms: now - 49 * 60000 },
+    { id: 'staging-s81-end', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'end_round', round: 81, secret: 75, winner: p1, winner_guess: 75, pot: 6, participants: 3 }), timestamp_ms: now - 40 * 60000 },
+
+    // Round 82 — streak — ACTIVE at tier 1 (champion alice_s's streak of 2).
+    // Range widens to 1–1000 (hard) with the tier's 15-guess budget; p2/p3 have
+    // already guessed so the board is populated, and p1 (the demo identity's
+    // wallet) has NOT, so a reviewer can place a guess into a live streak round.
+    // Seed hash '000002ab' → 683 % 1000 + 1 = 684 if it ever concludes.
+    { id: 'staging-s82-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: 82, seed_hash: '000002ab' + '9'.repeat(56), active_duration_ms: 900000, min_players: 1, max_guesses_per_player: 15, mode: 'normal', duration_track: 'streak', difficulty: 'hard', streak_tier: 1, streak_tier_name: 'On a roll' }), timestamp_ms: now - 5 * 60000 },
+    { id: 'staging-s82-g1', to: APP_PUBKEY, from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 82, guess: 500 }), timestamp_ms: now - 4 * 60000 },
+    { id: 'staging-s82-g2', to: APP_PUBKEY, from_pubkey: p3, amount: 1, memo: JSON.stringify({ app: 'numguess', type: 'guess', round: 82, guess: 750 }), timestamp_ms: now - 3 * 60000 },
+
     // Staging usernames
     { id: 'staging-u1', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p1, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'alice_s' }), timestamp_ms: now - 3 * day },
     { id: 'staging-u2', to: 'ut1p0p7y8ujacndc60r4a7pzk45dufdtarp6satvc0md7866633u8sqagm3az', from_pubkey: p2, amount: 1, memo: JSON.stringify({ app: 'usernames', type: 'set_username', username: 'bob_s' }), timestamp_ms: now - 3 * day },
@@ -1124,11 +1179,17 @@ async function postStartRound(track) {
   const roundId = maxId + 1;
 
   const activeDurationMs = TRACK_DURATIONS[track] || TIMER_DURATION_MS;
-  const difficulty = pendingDifficulty[track] || 'medium';
-  pendingDifficulty[track] = 'medium'; // consume config, reset to default
+  // Streak mode: the ladder sets the tier from the hottest current streak at
+  // the table. concludeRound awaits postEndRound before calling this, so the
+  // fold already includes the just-won round — a second consecutive win lands
+  // the NEXT round in a higher tier. Tiers reuse the existing difficulty keys
+  // and may tighten the guess budget (Blazing 7, Inferno 3).
+  const tierRung = track === 'streak' ? streakTierFor(game.getStreakChampionStreak()) : null;
+  const difficulty = tierRung ? tierRung.difficulty : (pendingDifficulty[track] || 'medium');
+  if (!tierRung) pendingDifficulty[track] = 'medium'; // consume config, reset to default
   const diffConfig = DIFFICULTIES[difficulty] || DIFFICULTIES.medium;
-  const maxGuessesPerPlayer = diffConfig.maxGuesses;
-  const roundMinPlayers = track === '1w' ? 1 : MIN_PLAYERS;
+  const maxGuessesPerPlayer = (tierRung && tierRung.maxGuesses) || diffConfig.maxGuesses;
+  const roundMinPlayers = (track === '1w' || track === 'streak') ? 1 : MIN_PLAYERS;
 
   const seedHash = crypto.randomBytes(32).toString('hex');
   const memo = {
@@ -1143,6 +1204,10 @@ async function postStartRound(track) {
     duration_track: track,
     difficulty,
   };
+  if (tierRung) {
+    memo.streak_tier = tierRung.tier;
+    memo.streak_tier_name = tierRung.name;
+  }
 
   if (APP_SECRET_KEY) {
     try {
@@ -1162,7 +1227,7 @@ async function postStartRound(track) {
     memo: JSON.stringify(memo),
     timestamp_ms: Date.now(),
   });
-  console.log(`[round] Started round ${roundId} (track=${track}, maxGuesses=${maxGuessesPerPlayer})`);
+  console.log(`[round] Started round ${roundId} (track=${track}, maxGuesses=${maxGuessesPerPlayer}${tierRung ? `, tier=${tierRung.tier} ${tierRung.name} (champion streak ${game.getStreakChampionStreak()})` : ''})`);
 }
 
 async function extendRound(round) {
@@ -1526,6 +1591,10 @@ const VALID_TRACKS = new Set(['1h', '6h', '1d', '1w']);
 // Admin: set difficulty for a specific track's next round
 app.post('/__numguess/admin/set-mode', (req, res) => {
   const { track, difficulty } = req.body || {};
+  if (track === 'streak') {
+    // Difficulty on the streak track is set by the ladder, never by hand.
+    return res.status(400).json({ error: 'Streak track difficulty is automatic: the ladder follows the hottest streak' });
+  }
   if (!VALID_TRACKS.has(track)) {
     return res.status(400).json({ error: 'Invalid track. Must be one of: 1h, 6h, 1d, 1w' });
   }
@@ -1772,7 +1841,7 @@ async function start() {
   // even for any state derivation that happens before the first public read.
   syncHiddenFromUsernames();
 
-  // After stream backfill, ensure all 4 tracks have an active round
+  // After stream backfill, ensure all 5 tracks have an active round
   setTimeout(async () => {
     // Configure the wallet signer up front so the first start_round send below
     // has a signer (the failure that previously blocked auto-start). Best-effort:
