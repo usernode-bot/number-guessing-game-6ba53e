@@ -2643,11 +2643,14 @@ function renderLeaderboard() {
     const totalScore = e.totalScore || 0;
     const streak = streaks[e.pubkey] && streaks[e.pubkey].bestStreak > 0 ? streaks[e.pubkey].bestStreak : 0;
     const streakBadge = streak > 0 ? ' <span class="streak-badge">🔥' + streak + '</span>' : '';
+    // Fixed date string from toLocaleDateString(), no escaping needed.
+    const lastPlayed = e.lastPlayed ? new Date(e.lastPlayed).toLocaleDateString() : '';
     return '<div class="lb-row' + (isMe ? ' is-me' : '') + '">' +
       '<div class="lb-rank ' + rankClass + '">' + rank + '</div>' +
       '<div class="lb-info">' +
         '<div class="lb-name">' + escapeHtml(name) + (isMe ? ' <strong>(you)</strong>' : '') + '</div>' +
         '<div class="lb-meta">' + e.won + ' win' + (e.won !== 1 ? 's' : '') + ' · ' + e.tokensWon + ' tokens · best: ' + bestWin + ' · ' + best + streakBadge + '</div>' +
+        (lastPlayed ? '<div class="lb-meta">last played ' + lastPlayed + '</div>' : '') +
       '</div>' +
       '<div class="lb-best-win"><span class="lb-score">' + totalScore.toLocaleString() + '</span><span class="lb-score-label">total pts</span></div>' +
       '</div>';

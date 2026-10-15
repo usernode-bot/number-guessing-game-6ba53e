@@ -211,9 +211,10 @@ function createGame(opts) {
       const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
       const w = r.winner;
       if (!isHidden(w)) {
-        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, lastPlayed: 0 };
         stats[w].won++;
         stats[w].tokensWon += r.pot || 0;
+        stats[w].lastPlayed = Math.max(stats[w].lastPlayed, r.endedAt || 0);
         if (secret != null && r.winnerGuess != null) {
           stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
         }
@@ -224,7 +225,8 @@ function createGame(opts) {
       }
       for (const g of r.guesses) {
         if (isHidden(g.from)) continue;
-        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, lastPlayed: 0 };
+        stats[g.from].lastPlayed = Math.max(stats[g.from].lastPlayed, g.ts || 0);
         if (secret != null) {
           stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
         }
@@ -232,6 +234,7 @@ function createGame(opts) {
     }
     for (const k of Object.keys(stats)) {
       if (stats[k].bestDist === Infinity) stats[k].bestDist = null;
+      if (stats[k].lastPlayed === 0) stats[k].lastPlayed = null;
     }
     return stats;
   }
@@ -244,9 +247,10 @@ function createGame(opts) {
       const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
       const w = r.winner;
       if (!isHidden(w)) {
-        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, totalScore: 0, bestRoundScore: 0 };
+        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, totalScore: 0, bestRoundScore: 0, lastPlayed: 0 };
         stats[w].won++;
         stats[w].tokensWon += r.pot || 0;
+        stats[w].lastPlayed = Math.max(stats[w].lastPlayed, r.endedAt || 0);
         const winnerDist = (secret != null && r.winnerGuess != null) ? Math.abs(r.winnerGuess - secret) : null;
         if (winnerDist != null) {
           stats[w].bestDist = Math.min(stats[w].bestDist, winnerDist);
@@ -261,7 +265,8 @@ function createGame(opts) {
       }
       for (const g of r.guesses) {
         if (isHidden(g.from)) continue;
-        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, totalScore: 0, bestRoundScore: 0 };
+        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, totalScore: 0, bestRoundScore: 0, lastPlayed: 0 };
+        stats[g.from].lastPlayed = Math.max(stats[g.from].lastPlayed, g.ts || 0);
         if (secret != null) {
           stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
         }
@@ -269,6 +274,7 @@ function createGame(opts) {
     }
     for (const k of Object.keys(stats)) {
       if (stats[k].bestDist === Infinity) stats[k].bestDist = null;
+      if (stats[k].lastPlayed === 0) stats[k].lastPlayed = null;
     }
     return stats;
   }
@@ -283,9 +289,10 @@ function createGame(opts) {
       const secret = r.secret != null ? r.secret : (r.seedHash ? computeSecret(r.seedHash, r.range) : null);
       const w = r.winner;
       if (!isHidden(w)) {
-        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        if (!stats[w]) stats[w] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, lastPlayed: 0 };
         stats[w].won++;
         stats[w].tokensWon += r.pot || 0;
+        stats[w].lastPlayed = Math.max(stats[w].lastPlayed, r.endedAt || 0);
         if (secret != null && r.winnerGuess != null) {
           stats[w].bestDist = Math.min(stats[w].bestDist, Math.abs(r.winnerGuess - secret));
         }
@@ -296,7 +303,8 @@ function createGame(opts) {
       }
       for (const g of r.guesses) {
         if (isHidden(g.from)) continue;
-        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null };
+        if (!stats[g.from]) stats[g.from] = { won: 0, tokensWon: 0, bestDist: Infinity, bestWinGuessCount: null, lastPlayed: 0 };
+        stats[g.from].lastPlayed = Math.max(stats[g.from].lastPlayed, g.ts || 0);
         if (secret != null) {
           stats[g.from].bestDist = Math.min(stats[g.from].bestDist, Math.abs(g.guess - secret));
         }
@@ -304,6 +312,7 @@ function createGame(opts) {
     }
     for (const k of Object.keys(stats)) {
       if (stats[k].bestDist === Infinity) stats[k].bestDist = null;
+      if (stats[k].lastPlayed === 0) stats[k].lastPlayed = null;
     }
     return stats;
   }
