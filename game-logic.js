@@ -8,11 +8,40 @@ const DIFFICULTIES = {
 
 // Score earned for a won round. Returns 0 for losses.
 // Formula: base × max(1, maxGuesses − numGuesses + 1), doubled on a bullseye.
-function computeRoundScore(difficulty, numGuesses, won, bestDistance) {
+// maxGuessesOverride lets streak-mode tiers pass the round's actual per-player
+// guess budget (Blazing/Inferno reuse 'hard' but with 7/3 guesses, so the
+// difficulty key's own maxGuesses would overstate the multiplier there).
+function computeRoundScore(difficulty, numGuesses, won, bestDistance, maxGuessesOverride) {
   if (!won) return 0;
   const cfg = DIFFICULTIES[difficulty] || DIFFICULTIES.medium;
-  const score = cfg.base * Math.max(1, cfg.maxGuesses - numGuesses + 1);
+  const budget = maxGuessesOverride || cfg.maxGuesses;
+  const score = cfg.base * Math.max(1, budget - numGuesses + 1);
   return bestDistance === 0 ? score * 2 : score;
+}
+
+// ---------------------------------------------------------------------------
+// Streak mode ladder — the fifth track ('streak') climbs these tiers as the
+// hottest current streak at the table grows. Tiers REUSE the existing
+// difficulty keys (so score buckets, the mode picker, and the leaderboard stay
+// untouched) with an optional maxGuesses override that tightens the guess
+// budget: the range widens first (medium 1–100 → hard 1–1000), then the budget
+// shrinks (15 → 7 → 3). Names are the client-facing tier labels.
+// ---------------------------------------------------------------------------
+const STREAK_LADDER = [
+  { tier: 0, name: 'Warming up', minStreak: 0, difficulty: 'medium', maxGuesses: null },
+  { tier: 1, name: 'On a roll',  minStreak: 2, difficulty: 'hard',   maxGuesses: null },
+  { tier: 2, name: 'Blazing',    minStreak: 4, difficulty: 'hard',   maxGuesses: 7 },
+  { tier: 3, name: 'Inferno',    minStreak: 7, difficulty: 'hard',   maxGuesses: 3 },
+];
+
+// Map a champion streak to its ladder rung: the highest rung whose minStreak
+// the streak meets. 0/1 → Warming up, 2/3 → On a roll, 4–6 → Blazing, 7+ → Inferno.
+function streakTierFor(streak) {
+  let rung = STREAK_LADDER[0];
+  for (const r of STREAK_LADDER) {
+    if (streak >= r.minStreak) rung = r;
+  }
+  return rung;
 }
 
 function createGame(opts) {
@@ -106,6 +135,10 @@ function createGame(opts) {
       durationTrack,
       difficulty,
       range,
+      // Streak-mode tier stamped by postStartRound in server.js (null on all
+      // other tracks). Drives the tier badge and the ladder card on the client.
+      streakTier: memo.streak_tier != null ? memo.streak_tier : null,
+      streakTierName: memo.streak_tier_name || null,
       startedAt: tx.ts,
       endsAt: tx.ts + activeDurationMs,
       guesses: [],
@@ -339,10 +372,23 @@ function createGame(opts) {
     };
 
     for (const r of completed) {
-      if (!r.winner) continue; // no-winner rounds leave every streak untouched
       // A hidden winner is treated like a no-winner round for streak purposes:
       // they earn no credit and other participants are not reset by them.
-      if (isHidden(r.winner)) continue;
+      if (!r.winner || isHidden(r.winner)) {
+        // Streak track: a winnerless round (timeout, or the winner is hidden)
+        // RESETS its visible participants — the spec's "a loss or a timeout
+        // resets your streak" rule, which needs an explicit reset event since
+        // there is no winner to trigger one. Other tracks keep the untouched
+        // behavior.
+        if (r.durationTrack === 'streak') {
+          const participants = new Set(r.guesses.map((g) => g.from));
+          for (const p of participants) {
+            if (isHidden(p)) continue;
+            ensure(p).currentStreak = 0;
+          }
+        }
+        continue;
+      }
       const w = ensure(r.winner);
       w.currentStreak += 1;
       if (w.currentStreak > w.bestStreak) w.bestStreak = w.currentStreak;
@@ -357,8 +403,21 @@ function createGame(opts) {
 
   // Per-track streak object for a single player, shaped exactly like the
   // `myStreaks` payload the frontend consumes (each track defaults to 0/0).
+  // The "champion" streak drives the streak track's ladder: the hottest
+  // currentStreak across non-hidden players on the streak track. postStartRound
+  // maps it through streakTierFor to pick the next round's tier.
+  function getStreakChampionStreak() {
+    const streaks = getTrackStreaks('streak');
+    let max = 0;
+    for (const [pk, s] of Object.entries(streaks)) {
+      if (isHidden(pk)) continue;
+      if (s.currentStreak > max) max = s.currentStreak;
+    }
+    return max;
+  }
+
   function getMyStreaks(pubkey) {
-    const TRACK_KEYS = ['1h', '6h', '1d', '1w'];
+    const TRACK_KEYS = ['1h', '6h', '1d', '1w', 'streak'];
     const out = {};
     for (const track of TRACK_KEYS) {
       const s = pubkey ? getTrackStreaks(track)[pubkey] : null;
@@ -439,6 +498,8 @@ function createGame(opts) {
       durationTrack: round.durationTrack,
       difficulty: round.difficulty || 'medium',
       range: round.range || 100,
+      streakTier: round.streakTier != null ? round.streakTier : null,
+      streakTierName: round.streakTierName || null,
       participants: visibleGuesses.length,
       pot: visibleGuesses.reduce((s, g) => s + g.amount, 0),
       guesses: visibleGuesses.map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
@@ -466,13 +527,15 @@ function createGame(opts) {
       durationTrack: r.durationTrack,
       difficulty: r.difficulty || 'medium',
       range: r.range || 100,
+      streakTier: r.streakTier != null ? r.streakTier : null,
+      streakTierName: r.streakTierName || null,
       maxGuessesPerPlayer: r.maxGuessesPerPlayer,
       guesses: r.guesses.filter((g) => !isHidden(g.from)).map((g) => ({ from: g.from, guess: g.guess, ts: g.ts })),
     };
   }
 
   function getStateResponse() {
-    const TRACK_KEYS = ['1h', '6h', '1d', '1w'];
+    const TRACK_KEYS = ['1h', '6h', '1d', '1w', 'streak'];
     const tracks = {};
     for (const track of TRACK_KEYS) {
       const currentRound = getCurrentRoundForTrack(track);
@@ -529,6 +592,7 @@ function createGame(opts) {
     getPlayerStatsForDifficulty,
     getPlayerStatsForTrackAndDifficulty,
     getTrackStreaks,
+    getStreakChampionStreak,
     getMyStreaks,
     getStateResponse,
     handleRequest,
@@ -538,4 +602,4 @@ function createGame(opts) {
   };
 }
 
-module.exports = { createGame, DIFFICULTIES, computeRoundScore };
+module.exports = { createGame, DIFFICULTIES, computeRoundScore, STREAK_LADDER, streakTierFor };

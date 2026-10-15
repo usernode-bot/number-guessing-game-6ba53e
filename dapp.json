@@ -239,6 +239,31 @@
       "name": "State endpoint includes byTrack leaderboard data",
       "path": "/__numguess/state",
       "expectText": "byTrack"
+    },
+    {
+      "name": "State endpoint includes the streak track",
+      "path": "/__numguess/state",
+      "expectText": "\"streak\""
+    },
+    {
+      "name": "Streak tier badge renders on the streak track",
+      "path": "/?demo=1&demoAutoGuess=1&demoTrack=streak",
+      "expectText": "On a roll"
+    },
+    {
+      "name": "Streak ladder card renders its rungs",
+      "path": "/?demo=1&demoAutoGuess=1&demoTrack=streak",
+      "expectSelector": "#ladder-rungs"
+    },
+    {
+      "name": "15m duration badge shows on streak rounds",
+      "path": "/?demo=1&demoAutoGuess=1&demoTrack=streak",
+      "expectText": "15m"
+    },
+    {
+      "name": "Leaderboard streak track button renders",
+      "path": "/",
+      "expectSelector": "#lb-track-streak"
     }
   ]
 }
