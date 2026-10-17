@@ -1631,7 +1631,7 @@ function getMyGuesses(round) {
   const confirmed = (round.guesses || []).filter((g) => g.from === myAddress);
   const pend = getPendingForRound(round)
     .filter((p) => !confirmed.some((g) => g.guess === p.guess))
-    .map((p) => ({ from: myAddress, guess: p.guess, pending: p.status !== 'confirmed' }));
+    .map((p) => ({ from: myAddress, guess: p.guess, pending: p.status !== 'confirmed', stale: p.status === 'timeout' }));
   return confirmed.concat(pend);
 }
 
@@ -1890,9 +1890,19 @@ async function rehydratePendingGuesses() {
     if (!res.ok) return;
     const data = await res.json();
     const pending = (data && Array.isArray(data.pending)) ? data.pending : [];
+    const restored = [];
     for (const p of pending) {
       if (p == null || p.roundId == null || p.guess == null) continue;
-      applyOptimisticGuess(p.roundId, p.guess); // idempotent by round + value
+      const entry = applyOptimisticGuess(p.roundId, p.guess); // idempotent by round + value
+      // Only reconcile entries that are still unconfirmed: a row already
+      // present (and settled) keeps its state, and one the chain already
+      // shows needs no observe window.
+      if (entry && entry.status === 'pending' && !guessLanded(p.roundId, p.guess)) {
+        restored.push(entry);
+      }
+    }
+    for (const entry of restored) {
+      reconcileGuessInBackground(entry.roundId, entry.guess);
     }
   } catch (e) {
     console.warn('[rehydratePendingGuesses] failed:', e && e.message ? e.message : e);
@@ -2477,7 +2487,7 @@ function updateGuessCard(round, myGuesses, maxGuesses, allGuessesUsed) {
         (g.pending ? '<span class="my-guess-pending-dot"></span>' : '') +
         '<span class="my-guess-val">' + g.guess + '</span>' +
         '<span class="my-guess-tag' + (g.pending ? ' is-pending' : '') + '">' +
-        (g.pending ? 'Placing…' : 'Guess ' + (i + 1)) + '</span>' +
+        (g.pending ? (g.stale ? 'Still confirming…' : 'Placing…') : 'Guess ' + (i + 1)) + '</span>' +
         '</div>';
       }).join('');
   } else {
