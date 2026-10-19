@@ -84,6 +84,7 @@
       --track-6h: #ffd23f;
       --track-1d: #2dd4bf;
       --track-1w: #5aa9ff;
+      --track-streak: #d08bf5;
       /* Per-difficulty hues */
       --diff-easy: #3ee08a;
       --diff-medium: #a78bff;
@@ -138,6 +139,7 @@
       --track-6h: #ff9f1c;
       --track-1d: #12b886;
       --track-1w: #2f7df6;
+      --track-streak: #9333ea;
       --diff-easy: #1eb15a;
       --diff-medium: #6d4bf0;
       --diff-hard: #ec4899;
@@ -272,6 +274,27 @@
     .mode-badge.timed { border-color: color-mix(in srgb, var(--peach) 55%, transparent); color: var(--peach); background: color-mix(in srgb, var(--peach) 12%, transparent); }
     .mode-badge.duration { border-color: color-mix(in srgb, var(--sky) 55%, transparent); color: var(--sky); background: color-mix(in srgb, var(--sky) 12%, transparent); }
     .mode-badge.hard { border-color: color-mix(in srgb, var(--mint) 55%, transparent); color: var(--mint); background: color-mix(in srgb, var(--mint) 12%, transparent); }
+    /* Streak tier badge — replaces the difficulty badge on the streak track */
+    .mode-badge.tier { border-color: color-mix(in srgb, var(--track-streak) 55%, transparent); color: var(--track-streak); background: color-mix(in srgb, var(--track-streak) 12%, transparent); }
+    /* ---- Streak ladder card (streak track only) ---- */
+    .ladder-card { padding: .9rem 1rem; margin-bottom: .85rem; }
+    .ladder-title { font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); }
+    .ladder-tier { font-size: 1.15rem; font-weight: 800; color: var(--track-streak); margin-top: .25rem; }
+    .ladder-meta { font-size: .78rem; color: var(--text-muted); margin-top: .15rem; }
+    .ladder-rungs { display: flex; gap: .3rem; margin-top: .6rem; }
+    .ladder-rungs span { flex: 1; height: 6px; border-radius: 4px; background: var(--border); }
+    .ladder-rungs span.lit { background: var(--track-streak); }
+    .ladder-rungs span.next { background: color-mix(in srgb, var(--track-streak) 35%, transparent); }
+    .ladder-next { font-size: .72rem; color: var(--text-muted); margin-top: .5rem; line-height: 1.4; }
+    /* Streak line on the win/lose result card (streak track only) */
+    .result-streak {
+      margin-top: .9rem; padding: .6rem .8rem;
+      border-radius: var(--radius-sm);
+      background: color-mix(in srgb, var(--track-streak) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--track-streak) 34%, transparent);
+      color: var(--track-streak); font-size: .82rem; font-weight: 700; line-height: 1.5;
+    }
+    .result-streak b { color: var(--text); }
     .countdown { font-size: .88rem; font-weight: 700; color: var(--accent-light); font-variant-numeric: tabular-nums; flex: 1; text-align: center; min-width: 60px; transition: color .4s ease; }
     /* Calm urgency: a gently deeper accent tone as time runs low — never red,
        never blinking. */
@@ -711,6 +734,7 @@
     #panel-game[data-track="6h"] { --track-active: var(--track-6h); }
     #panel-game[data-track="1d"] { --track-active: var(--track-1d); }
     #panel-game[data-track="1w"] { --track-active: var(--track-1w); }
+    #panel-game[data-track="streak"] { --track-active: var(--track-streak); }
     .round-badge {
       background: linear-gradient(135deg, var(--track-active), color-mix(in srgb, var(--track-active) 60%, #000 16%));
       box-shadow: 0 3px 12px color-mix(in srgb, var(--track-active) 45%, transparent);
@@ -723,6 +747,7 @@
     #gs-6h.active, #hs-6h.active { background: linear-gradient(135deg, var(--track-6h), color-mix(in srgb, var(--track-6h) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--track-6h) 45%, transparent); }
     #gs-1d.active, #hs-1d.active { background: linear-gradient(135deg, var(--track-1d), color-mix(in srgb, var(--track-1d) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--track-1d) 45%, transparent); }
     #gs-1w.active, #hs-1w.active { background: linear-gradient(135deg, var(--track-1w), color-mix(in srgb, var(--track-1w) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--track-1w) 45%, transparent); }
+    #gs-streak.active, #hs-streak.active, #lb-track-streak.active { background: linear-gradient(135deg, var(--track-streak), color-mix(in srgb, var(--track-streak) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--track-streak) 45%, transparent); }
 
     /* Difficulty hues — leaderboard tabs + mode-picker segments + difficulty badge */
     #lb-easy.active, #seg-easy.active { background: linear-gradient(135deg, var(--diff-easy), color-mix(in srgb, var(--diff-easy) 62%, #000 16%)); box-shadow: 0 3px 12px color-mix(in srgb, var(--diff-easy) 42%, transparent); }
@@ -826,6 +851,7 @@
       <button class="seg-btn" id="gs-6h" onclick="setGameTrack('6h')">6H</button>
       <button class="seg-btn active" id="gs-1d" onclick="setGameTrack('1d')">1D</button>
       <button class="seg-btn" id="gs-1w" onclick="setGameTrack('1w')">1W</button>
+      <button class="seg-btn" id="gs-streak" onclick="setGameTrack('streak')">🔥</button>
     </div>
 
     <!-- Streak widget -->
@@ -834,11 +860,21 @@
       <span>🏆 Best <strong id="streak-best">0</strong></span>
     </div>
 
+    <!-- Streak ladder (streak track only) — the tier the hottest streak has set -->
+    <div class="card ladder-card" id="ladder-card" style="display:none">
+      <div class="ladder-title">Streak ladder</div>
+      <div class="ladder-tier" id="ladder-tier">—</div>
+      <div class="ladder-meta" id="ladder-meta"></div>
+      <div class="ladder-rungs" id="ladder-rungs"></div>
+      <div class="ladder-next" id="ladder-next"></div>
+    </div>
+
     <!-- Round bar -->
     <div class="card round-bar" id="round-bar">
       <span class="round-badge" id="round-badge">Round —</span>
       <span id="duration-badge" class="mode-badge" style="display:none"></span>
       <span id="mode-badge" class="mode-badge" style="display:none">Normal</span>
+      <span id="tier-badge" class="mode-badge tier" style="display:none"></span>
       <span class="countdown" id="countdown">—</span>
       <span class="players-info" id="players-info">— players · — tokens</span>
       <button class="settings-btn" id="settings-btn" onclick="openModePicker()" title="Set next round mode" style="display:none">⚙</button>
@@ -902,6 +938,7 @@
       <div class="result-mine" id="result-mine"></div>
       <div id="result-score" class="result-score" style="display:none"></div>
       <div id="result-score-detail" class="result-score-detail" style="display:none"></div>
+      <div id="result-streak" class="result-streak" style="display:none"></div>
       <div id="personal-best-banner" class="personal-best-banner" style="display:none">⭐ New Personal Best!</div>
       <div class="next-round-label" id="next-round-label"></div>
     </div>
@@ -915,6 +952,7 @@
       <button class="seg-btn" id="lb-track-6h" onclick="setLbTrack('6h')">6H</button>
       <button class="seg-btn" id="lb-track-1d" onclick="setLbTrack('1d')">1D</button>
       <button class="seg-btn" id="lb-track-1w" onclick="setLbTrack('1w')">1W</button>
+      <button class="seg-btn" id="lb-track-streak" onclick="setLbTrack('streak')">🔥</button>
     </div>
     <div class="segment track-selector" id="lb-difficulty-selector">
       <button class="seg-btn" id="lb-easy" onclick="setLbDifficulty('easy')">Easy</button>
@@ -937,6 +975,7 @@
       <button class="seg-btn" id="hs-6h" onclick="setHistTrack('6h')">6H</button>
       <button class="seg-btn active" id="hs-1d" onclick="setHistTrack('1d')">1D</button>
       <button class="seg-btn" id="hs-1w" onclick="setHistTrack('1w')">1W</button>
+      <button class="seg-btn" id="hs-streak" onclick="setHistTrack('streak')">🔥</button>
     </div>
     <div class="section-header">Past rounds</div>
     <div id="history-list">
@@ -999,10 +1038,10 @@
   <div class="modal">
     <button class="modal-close" onclick="closeModePicker()">✕</button>
     <div class="modal-title" id="mode-picker-title">⚙ Round Settings</div>
-    <div class="mode-picker-note">Difficulty applies when the next round starts for this track. Any logged-in player can set this.</div>
+    <div class="mode-picker-note" id="mode-picker-note">Difficulty applies when the next round starts for this track. Any logged-in player can set this.</div>
 
-    <div class="mode-section-label">Difficulty</div>
-    <div class="segment" style="flex-direction:column;gap:.5rem">
+    <div class="mode-section-label" id="mode-picker-diff-label">Difficulty</div>
+    <div class="segment" id="mode-picker-segment" style="flex-direction:column;gap:.5rem">
       <button class="seg-btn" id="seg-easy" onclick="setSegment('easy')">Easy — 1 to 10 · 5 guesses</button>
       <button class="seg-btn active" id="seg-medium" onclick="setSegment('medium')">Medium — 1 to 100 · 10 guesses</button>
       <button class="seg-btn" id="seg-hard" onclick="setSegment('hard')">Hard — 1 to 1000 · 15 guesses</button>
@@ -1033,7 +1072,25 @@ const FAST_POLL_DURATION = 30000;
 // backstop is dropped regardless of status, so nothing leaks forever.
 const PENDING_TIMEOUT_TTL_MS = 90000;
 const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
-const TRACKS = ['1h', '6h', '1d', '1w'];
+const TRACKS = ['1h', '6h', '1d', '1w', 'streak'];
+
+// Client mirror of the streak ladder (game-logic.js STREAK_LADDER). Tiers reuse
+// the existing difficulty keys; maxGuesses is the tier's own guess budget (null
+// = the difficulty key's default). Keep in lockstep with the server — the round
+// bar and the ladder card read from it while the round payload arrives.
+const CLIENT_STREAK_LADDER = [
+  { tier: 0, name: 'Warming up', minStreak: 0, difficulty: 'medium', range: 100,  maxGuesses: 10 },
+  { tier: 1, name: 'On a roll',  minStreak: 2, difficulty: 'hard',   range: 1000, maxGuesses: 15 },
+  { tier: 2, name: 'Blazing',    minStreak: 4, difficulty: 'hard',   range: 1000, maxGuesses: 7 },
+  { tier: 3, name: 'Inferno',    minStreak: 7, difficulty: 'hard',   range: 1000, maxGuesses: 3 },
+];
+function streakRungFor(streak) {
+  let rung = CLIENT_STREAK_LADDER[0];
+  for (const r of CLIENT_STREAK_LADDER) {
+    if (streak >= r.minStreak) rung = r;
+  }
+  return rung;
+}
 
 let myAddress = null;
 let myPubkey = null;
@@ -1236,7 +1293,7 @@ function setGameTrack(track) {
 
 function setLbTrack(track) {
   selectedLbTrack = track;
-  ['all', '1h', '6h', '1d', '1w'].forEach((t) => {
+  ['all', '1h', '6h', '1d', '1w', 'streak'].forEach((t) => {
     document.getElementById('lb-track-' + t).classList.toggle('active', t === track);
   });
   if (gameState) renderLeaderboard();
@@ -2113,7 +2170,16 @@ async function saveUsername() {
 function openModePicker() {
   const modal = document.getElementById('mode-picker-modal');
   modal.classList.add('open');
-  document.getElementById('mode-picker-title').textContent = '⚙ ' + selectedTrack.toUpperCase() + ' Round Settings';
+  document.getElementById('mode-picker-title').textContent = '⚙ ' + (selectedTrack === 'streak' ? '🔥 Streak' : selectedTrack.toUpperCase()) + ' Round Settings';
+  // Streak track: difficulty is the ladder's job, so the picker hides the
+  // difficulty segment entirely instead of offering a setting that does nothing.
+  const isStreak = selectedTrack === 'streak';
+  document.getElementById('mode-picker-note').textContent = isStreak
+    ? 'Streak rounds pick the difficulty for everyone, and the ladder follows the hottest streak at the table.'
+    : 'Difficulty applies when the next round starts for this track. Any logged-in player can set this.';
+  document.getElementById('mode-picker-diff-label').style.display = isStreak ? 'none' : '';
+  document.getElementById('mode-picker-segment').style.display = isStreak ? 'none' : '';
+  document.getElementById('mode-save-btn').style.display = isStreak ? 'none' : '';
   const diff = (gameState && gameState.pendingDifficulty && gameState.pendingDifficulty[selectedTrack]) || 'medium';
   pickerSegment = diff;
   ['easy', 'medium', 'hard'].forEach((d) => {
@@ -2245,6 +2311,26 @@ async function refreshState() {
   }
 }
 
+// Paint the streak ladder card for the given tier: lit rungs up to and
+// including the current tier, the next rung faintly lit, and a "next tier"
+// line naming what a hotter streak unlocks.
+function renderLadderCard(tier) {
+  const card = document.getElementById('ladder-card');
+  if (!card) return;
+  card.style.display = '';
+  const rung = CLIENT_STREAK_LADDER[tier] || CLIENT_STREAK_LADDER[0];
+  document.getElementById('ladder-tier').textContent = '🔥 ' + rung.name;
+  document.getElementById('ladder-meta').textContent =
+    'Guess 1–' + rung.range + ' · up to ' + rung.maxGuesses + ' guesses';
+  document.getElementById('ladder-rungs').innerHTML = CLIENT_STREAK_LADDER.map((r, i) =>
+    '<span class="' + (i <= rung.tier ? 'lit' : i === rung.tier + 1 ? 'next' : '') + '"></span>'
+  ).join('');
+  const next = CLIENT_STREAK_LADDER[rung.tier + 1];
+  document.getElementById('ladder-next').textContent = next
+    ? 'Next: ' + next.name + ' · 1–' + next.range + ' · ' + next.maxGuesses + ' guesses (streak ' + next.minStreak + ')'
+    : 'Top of the ladder — 1–1000 with 3 guesses';
+}
+
 function render() {
   if (!gameState || !gameState.tracks) return;
   // Drop optimistic guesses the chain has caught up to (or that no longer
@@ -2270,6 +2356,7 @@ function render() {
     const durMs = round.activeDurationMs;
     let durLabel, durCls;
     if (!durMs || durMs <= 60000) { durLabel = '60s'; durCls = 'timed'; }
+    else if (durMs <= 900000) { durLabel = '15m'; durCls = 'duration'; }
     else if (durMs <= 3600000) { durLabel = '1h'; durCls = 'duration'; }
     else if (durMs <= 21600000) { durLabel = '6h'; durCls = 'duration'; }
     else if (durMs <= 86400000) { durLabel = '1d'; durCls = 'duration'; }
@@ -2287,11 +2374,30 @@ function render() {
     modeBadge.className = 'mode-badge' + (diffCls[diff] || '');
     modeBadge.dataset.diff = diff;
     modeBadge.textContent = (diffLabels[diff] || diff) + ' · 1–' + range;
+
+    // Streak track: the tier badge replaces the difficulty badge — the ladder
+    // sets the difficulty, so naming both would read as two settings. The
+    // ladder card below the streak widget shows the whole run the table is on.
+    const tierBadge = document.getElementById('tier-badge');
+    if (selectedTrack === 'streak') {
+      modeBadge.style.display = 'none';
+      const tier = round.streakTier != null ? round.streakTier : 0;
+      const rung = CLIENT_STREAK_LADDER[tier] || CLIENT_STREAK_LADDER[0];
+      tierBadge.style.display = '';
+      tierBadge.textContent = '🔥 ' + (round.streakTierName || rung.name) + ' · 1–' + range +
+        ' · ' + (round.maxGuessesPerPlayer || rung.maxGuesses) + ' guesses';
+      renderLadderCard(tier);
+    } else {
+      tierBadge.style.display = 'none';
+      document.getElementById('ladder-card').style.display = 'none';
+    }
   } else {
     document.getElementById('round-badge').textContent = 'No active round';
     document.getElementById('players-info').textContent = '';
     document.getElementById('duration-badge').style.display = 'none';
     document.getElementById('mode-badge').style.display = 'none';
+    document.getElementById('tier-badge').style.display = 'none';
+    document.getElementById('ladder-card').style.display = 'none';
     updateGuessRange(100);
   }
 
@@ -2499,10 +2605,13 @@ const CLIENT_DIFFICULTIES = {
   medium: { maxGuesses: 10, base: 300  },
   hard:   { maxGuesses: 15, base: 1000 },
 };
-function computeRoundScore(difficulty, numGuesses, won, bestDistance) {
+function computeRoundScore(difficulty, numGuesses, won, bestDistance, maxGuessesOverride) {
   if (!won) return 0;
   const cfg = CLIENT_DIFFICULTIES[difficulty] || CLIENT_DIFFICULTIES.medium;
-  const score = cfg.base * Math.max(1, cfg.maxGuesses - numGuesses + 1);
+  // Same override rule as the server: streak tiers (Blazing/Inferno) tighten the
+  // round's guess budget, so the multiplier uses the round's real budget.
+  const budget = maxGuessesOverride || cfg.maxGuesses;
+  const score = cfg.base * Math.max(1, budget - numGuesses + 1);
   return bestDistance === 0 ? score * 2 : score;
 }
 
@@ -2554,10 +2663,28 @@ function renderResult(round, myGuesses) {
       mine = lead + (myGuesses.length > 1 ? 'Your best guess was ' : 'Your guess was ') + bestGuess.guess + ', just ' + dist + ' away. Jump into the next round!';
     }
     document.getElementById('result-mine').textContent = mine;
-    earnedScore = computeRoundScore(round.difficulty || 'medium', myGuesses.length, iWon, iWon ? dist : null);
+    earnedScore = computeRoundScore(round.difficulty || 'medium', myGuesses.length, iWon, iWon ? dist : null, round.maxGuessesPerPlayer);
   } else {
     document.getElementById('bullseye-badge').style.display = 'none';
     document.getElementById('result-mine').textContent = myGuesses.length > 0 ? '' : 'You sat this one out — hop into the next round!';
+  }
+
+  // Streak line (streak track only): what a win does to your streak and which
+  // tier the NEXT round runs at; a loss to a visible winner reads as the reset.
+  const streakLineEl = document.getElementById('result-streak');
+  if (streakLineEl) {
+    const ms = gameState && gameState.myStreaks ? gameState.myStreaks.streak : null;
+    const endedStreakRound = round.durationTrack === 'streak' && round.endedAt != null;
+    if (endedStreakRound && iWonRound && ms) {
+      const nextRung = streakRungFor(ms.currentStreak);
+      streakLineEl.innerHTML = '🔥 Streak: <b>' + ms.currentStreak + '</b> · next round: <b>' + nextRung.name + '</b> · 1–' + nextRung.range + ' · ' + nextRung.maxGuesses + ' guesses';
+      streakLineEl.style.display = '';
+    } else if (endedStreakRound && round.winner && ms && ms.currentStreak === 0 && round.guesses.some((g) => g.from === myAddress)) {
+      streakLineEl.textContent = '🔥 Streak reset. Win the next round to start a new one.';
+      streakLineEl.style.display = '';
+    } else {
+      streakLineEl.style.display = 'none';
+    }
   }
 
   const scoreEl = document.getElementById('result-score');
@@ -2669,7 +2796,9 @@ function renderHistory() {
     const date = r.endedAt ? new Date(r.endedAt).toLocaleDateString() : '';
     const id = 'hist-' + r.id;
     const modeTag = r.mode === 'timed' ? ' ⏱' : '';
-    const diffTag = r.difficulty && r.difficulty !== 'medium' ? ' · ' + r.difficulty.charAt(0).toUpperCase() + r.difficulty.slice(1) : '';
+    const diffTag = r.durationTrack === 'streak' && r.streakTierName
+      ? ' · ' + r.streakTierName
+      : (r.difficulty && r.difficulty !== 'medium' ? ' · ' + r.difficulty.charAt(0).toUpperCase() + r.difficulty.slice(1) : '');
     const guessRows = (r.guesses || []).map((g) => {
       const isWinner = g.from === r.winner;
       const isMe = g.from === myAddress;
@@ -2794,7 +2923,7 @@ function renderMyGames() {
       '<div class="mg-stat"><strong>' + bestRoundScore.toLocaleString() + '</strong><small>best round</small></div>';
   }
 
-  const trackLabel = { '1h': '1H', '6h': '6H', '1d': '1D', '1w': '1W' };
+  const trackLabel = { '1h': '1H', '6h': '6H', '1d': '1D', '1w': '1W', streak: '🔥' };
   list.innerHTML = results.map((r) => {
     const date = r.ended_at ? new Date(r.ended_at).toLocaleDateString() : '';
     const tl = trackLabel[r.track] || (r.track || '');
@@ -2898,7 +3027,7 @@ async function init() {
   // the headless proposal checks, which navigate but never click. No-op unless
   // demo mode actually activates (staging) and an active round is present.
   const wantDemoAutoGuess = params.get('demoAutoGuess') === '1';
-  // Staging/demo-only: ?demoTrack=<1h|6h|1d|1w> preselects a track before the
+  // Staging/demo-only: ?demoTrack=<1h|6h|1d|1w|streak> preselects a track before the
   // auto-guess fires, so a proposal check can target a MULTI-guess round (e.g.
   // 6h) and assert the placed guess actually CONFIRMS ("Guess 1") rather than
   // hanging on "Placing…". The default 1d track lands on a single-guess round
