@@ -1033,6 +1033,13 @@ const FAST_POLL_DURATION = 30000;
 // backstop is dropped regardless of status, so nothing leaks forever.
 const PENDING_TIMEOUT_TTL_MS = 90000;
 const PENDING_MAX_AGE_MS = 10 * 60 * 1000;
+// Backstop for the settle pass: once a still-'pending' entry is older than this
+// it has outlived the send budget (TX_SEND_OPTS.timeoutMs + 8s) AND the
+// background reconcile window (GUESS_RECONCILE_MS) with nothing left watching
+// it, so the settle pass flips it to 'timeout' itself. Strictly later than the
+// ~46s worst case, so it never races the background reconcile into showing the
+// timeout hint twice for the same guess.
+const PENDING_SETTLE_MS = 60000;
 const TRACKS = ['1h', '6h', '1d', '1w'];
 
 let myAddress = null;
@@ -1056,6 +1063,7 @@ let pollTimer = null;
 // { roundId, track, guess, ts, status: 'pending' | 'confirmed' | 'timeout' }.
 let pendingGuesses = [];
 let countdownTimer = null;
+let settleTimer = null;
 // Staging-only demo mode (activated by ?demo=1 when the server reports staging):
 // simulates the on-chain send with a fixed pending delay so the spinner →
 // confirmed lifecycle is observable without a live wallet / explorer round-trip.
@@ -1659,6 +1667,7 @@ function removePendingGuess(entry) {
 function reconcilePendingGuesses() {
   if (!pendingGuesses.length || !gameState || !gameState.tracks) return;
   const now = Date.now();
+  let hintDue = false;
   pendingGuesses = pendingGuesses.filter((p) => {
     if (now - p.ts > PENDING_MAX_AGE_MS) return false;
     if (p.status === 'timeout' && now - p.ts > PENDING_TIMEOUT_TTL_MS) return false;
@@ -1669,8 +1678,45 @@ function reconcilePendingGuesses() {
     if (DEMO) return true; // never reconciled from chain in demo mode
     // Authoritative guess present on-chain → reconciled; stop showing the dup.
     const landed = (round.guesses || []).some((g) => g.from === myAddress && g.guess === p.guess);
-    return !landed;
+    if (landed) return false;
+    // Settle backstop: a still-'pending' entry past PENDING_SETTLE_MS has
+    // outlived the send budget and the background reconcile window with
+    // nothing left watching it (e.g. the state polls are failing). Flip it to
+    // 'timeout' so it renders as the row + "Hang tight" hint, clear the
+    // server's persisted copy so a reload can't rehydrate a row the page has
+    // already given up on, and surface the calm hint once for the batch. The
+    // existing 90s TTL then drops it 30s later.
+    if (p.status === 'pending' && now - p.ts > PENDING_SETTLE_MS) {
+      p.status = 'timeout';
+      clearPendingGuess(p.roundId, p.guess);
+      hintDue = true;
+    }
+    return true;
   });
+  if (hintDue) showGuessTimeoutHint();
+}
+
+// The calm "it may still have gone through" note + reconnect bar, shared by the
+// background reconcile's soft timeout and the settle pass's backstop. Same copy
+// as always — only where it's called from changes.
+function showGuessTimeoutHint() {
+  showError('Hang tight — this is taking a moment to confirm. It may still go through; check back shortly. 🌿');
+  const rb = document.getElementById('reconnect-bar');
+  if (rb) rb.classList.add('show');
+}
+
+// Settle pass: re-evaluate the pending rows on a short interval so they move on
+// even when the state poll loop is failing (refreshState's catch only shows the
+// reconnect bar — render() never runs there, so the 90s drop never did and a
+// row sat on "Placing…" until reload). Runs the reconcile against the last
+// known gameState and re-renders only when the pending list actually changed,
+// so a quiet tick never rebuilds the DOM.
+function settlePendingGuesses() {
+  if (!pendingGuesses.length || !gameState) return;
+  const sig = pendingGuesses.length + ':' + pendingGuesses.map((p) => p.status).join(',');
+  reconcilePendingGuesses();
+  const next = pendingGuesses.length + ':' + pendingGuesses.map((p) => p.status).join(',');
+  if (next !== sig) render();
 }
 
 function getMyBestGuess(round, myGuesses) {
@@ -1757,6 +1803,9 @@ function markGuessConfirmed(roundId, value) {
   applyOptimisticGuess(roundId, value);
   const entry = pendingGuesses.find((p) => p.roundId === roundId && p.guess === value);
   if (entry) entry.status = 'confirmed';
+  // The row confirmed, so forget the server's persisted optimistic copy right
+  // away instead of waiting for the GET endpoint to prune it (a no-op in DEMO).
+  clearPendingGuess(roundId, value);
   if (DEMO && !demoGuesses.some((d) => d.roundId === roundId && d.value === value)) {
     demoGuesses.push({ roundId: roundId, value: value });
   }
@@ -1808,9 +1857,11 @@ function reconcileGuessInBackground(roundId, value) {
     } else {
       const entry = pendingGuesses.find((p) => p.roundId === roundId && p.guess === value && p.status !== 'confirmed');
       if (entry) entry.status = 'timeout';
-      showError('Hang tight — this is taking a moment to confirm. It may still go through; check back shortly. 🌿');
-      const rb = document.getElementById('reconnect-bar');
-      if (rb) rb.classList.add('show');
+      // The observe window passed without confirmation — clear the server's
+      // persisted copy so a reload can't rehydrate a row the page has already
+      // softened, then surface the calm hint.
+      clearPendingGuess(roundId, value);
+      showGuessTimeoutHint();
     }
     if (gameState) render();
   }).catch(() => {});
@@ -2242,6 +2293,10 @@ async function refreshState() {
   } catch (e) {
     document.getElementById('reconnect-bar').classList.add('show');
     console.warn('refreshState error:', e.message);
+    // A failed poll must not freeze the pending lifecycle: re-evaluate the rows
+    // against the last known gameState so the settle flip and the 90s drop
+    // still run while the connection is down.
+    settlePendingGuesses();
   }
 }
 
@@ -2940,6 +2995,9 @@ async function init() {
 
   scheduleNextPoll();
   countdownTimer = setInterval(tickCountdown, 1000);
+  // Independent settle pass so pending rows are re-evaluated even when the
+  // state polls fail (render() only runs on a successful poll).
+  settleTimer = setInterval(settlePendingGuesses, GUESS_RECONCILE_INTERVAL_MS);
 
   if (wantDemoAutoGuess) {
     // Poll until demo mode + wallet + an active round are ready, then fire one
