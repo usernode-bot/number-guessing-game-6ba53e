@@ -13,14 +13,23 @@
 // Run: `node test/pending-guesses.test.js` (or `npm test`).
 
 const assert = require('node:assert');
+const crypto = require('node:crypto');
 const http = require('node:http');
 const jwt = require('jsonwebtoken');
 
-// Deterministic, inert boot: no DB (exercise the degrade path), a known
-// JWT_SECRET so we can sign tokens, and STAGING so the ?demo=1 branch is live.
+// Deterministic, inert boot: no DB (exercise the degrade path), a throwaway
+// RS256 keypair matching server.js's verify options so we can sign tokens, and
+// STAGING so the ?demo=1 branch is live. server.js reads the key at module
+// load, so the env must be set before the require below.
 delete process.env.DATABASE_URL;
 delete process.env.APP_SECRET_KEY;
-process.env.JWT_SECRET = 'test-secret-pending';
+const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+});
+process.env.USERNODE_JWT_PUBLIC_KEY = publicKey;
+process.env.USERNODE_APP_ID = 'numguess-test';
 process.env.USERNODE_ENV = 'staging';
 
 const srv = require('../server.js');
@@ -35,7 +44,11 @@ srv.numguessCache.injectSeedTransactions([
   { id: 't-pend-start', to: APP_PUBKEY, from_pubkey: APP_PUBKEY, amount: 0, memo: JSON.stringify({ app: 'numguess', type: 'start_round', round: LIVE_ROUND, seed_hash: '00000031' + 'b'.repeat(56), active_duration_ms: 3600000, min_players: 1, max_guesses_per_player: 10, mode: 'normal', duration_track: '1h', difficulty: 'medium' }), timestamp_ms: Date.now() - 60000 },
 ]);
 
-const token = jwt.sign({ id: 'pending-test-user', username: 'pend_s', usernode_pubkey: ACCOUNT }, 'test-secret-pending');
+const token = jwt.sign(
+  { id: 'pending-test-user', username: 'pend_s', usernode_pubkey: ACCOUNT, pur: 'iframe' },
+  privateKey,
+  { algorithm: 'RS256', issuer: 'usernode', audience: 'usernode:app:numguess-test' }
+);
 
 let failures = 0;
 async function check(name, fn) {
